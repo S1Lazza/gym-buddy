@@ -855,7 +855,7 @@ function knownNames(){
 /* ---------- events ---------- */
 document.addEventListener("click", async e => {
   const tabBtn = e.target.closest("nav.tabs button");
-  if (tabBtn) { if (tabBtn.dataset.tab === "history" && S.tab === "history") S.historyProgram = null; if (tabBtn.dataset.tab === "program" && S.tab === "program") S.programView = null; if (tabBtn.dataset.tab === "progress" && S.tab === "progress") { S.progressProgram = null; S.progressEx = null; S.compare = false; } S.tab = tabBtn.dataset.tab; S.editingId = null; S.previewDay = null; S.returnTab = null; S.editProgram = false; S.openMenu = null; render(); window.scrollTo(0,0); return; }
+  if (tabBtn) { /* History, Progress and Programs always open on their start screen; Workout keeps its place */ const t = tabBtn.dataset.tab; if (t === "history") S.historyProgram = null; if (t === "program") { S.programView = null; S.editProgram = false; } if (t === "progress") { S.progressProgram = null; S.progressEx = null; S.compare = false; } S.tab = tabBtn.dataset.tab; S.editingId = null; S.previewDay = null; S.returnTab = null; S.editProgram = false; S.openMenu = null; render(); window.scrollTo(0,0); return; }
   const b = e.target.closest("[data-act]"); if (!b) return;
   const act = b.dataset.act, i = b.dataset.i != null ? +b.dataset.i : null, j = b.dataset.j != null ? +b.dataset.j : null;
   const s = editorSession();
