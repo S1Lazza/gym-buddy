@@ -113,6 +113,13 @@ h2{font:600 15px/1.2 var(--sans);color:var(--ink2);margin:22px 2px 10px}
 .sp.old span{color:var(--old)}
 .sets{display:grid;grid-template-columns:26px 1fr 1fr 62px 52px;gap:7px;align-items:center;margin-top:10px}
 textarea{field-sizing:content;min-height:42px}
+.notebox{position:relative}
+.notebox textarea{padding-right:56px}
+.mic{position:absolute;right:6px;top:6px;width:42px;height:42px;border-radius:11px;display:grid;place-items:center;color:var(--ink2);background:var(--surface);border:1px solid var(--line)}
+.mic svg{width:20px;height:20px}
+.mic.rec{color:#111;background:var(--accent);border-color:var(--accent);animation:micpulse 1.2s ease-in-out infinite}
+@keyframes micpulse{50%{box-shadow:0 0 0 7px var(--accent-line)}}
+@media (prefers-reduced-motion:reduce){.mic.rec{animation:none}}
 .bwrow{display:grid;grid-template-columns:auto 84px auto;gap:8px;align-items:center;margin-top:10px}
 .bwrow input{width:100%;height:42px;border-radius:11px;border:1px solid var(--line);background:var(--bg);text-align:center;font:600 20px/1 var(--cond);font-variant-numeric:tabular-nums}
 .bwrow input.on{color:var(--accent);border-color:var(--accent-line)}
@@ -537,7 +544,82 @@ async function loadLastBackup(){
 }
 async function signOut(){ try { await SB.auth.signOut(); } catch(e){} location.reload(); }
 
-const APP_VERSION = "1.0.2"; // raise with every update
+const APP_VERSION = "1.1.0";
+/* ---------- voice notes: tap the mic, speak, the words are added to the note ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const VOICE = {rec: null, f: null, i: null, base: "", lang: "en-US", active: false, maxT: null};
+const MIC_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+function noteBox(textarea, f, i){
+  if (!SR) return textarea;
+  const on = VOICE.rec && VOICE.f === f && String(VOICE.i) === String(i);
+  return `<div class="notebox">${textarea}<button class="mic ${on ? "rec" : ""}" data-act="mic" data-f="${f}"${i != null ? ` data-i="${i}"` : ""} aria-label="${on ? "Stop dictation" : "Dictate a note"}">${MIC_SVG}</button></div>`;
+}
+const voiceSel = (f, i) => `#view textarea[data-f="${f}"]` + (i != null ? `[data-i="${i}"]` : "");
+const voiceBtn = (f, i) => document.querySelector(`#view button.mic[data-f="${f}"]` + (i != null ? `[data-i="${i}"]` : ""));
+function voiceWrite(text){
+  const s = editorSession(); if (!s) return;
+  if (VOICE.f === "snotes") s.notes = text; else if (s.exercises[VOICE.i]) s.exercises[VOICE.i].notes = text; else return;
+  const ta = document.querySelector(voiceSel(VOICE.f, VOICE.i)); if (ta) { ta.value = text; autosize(ta); }
+  queueSave(s);
+}
+function voiceTidy(base, said){
+  said = said.replace(/\s+/g, " ").trim(); if (!said) return base;
+  said = said[0].toUpperCase() + said.slice(1);          // every pause starts a new sentence
+  if (!/[.!?]$/.test(said)) said += ".";
+  if (!base.trim()) return said;
+  if (/\n\s*$/.test(base)) return base + said;
+  return base.replace(/\s+$/, "").replace(/([^.!?])$/, "$1.") + " " + said;
+}
+// tap to start, tap again to stop (like WhatsApp). The phone's recogniser ends after each pause,
+// so while recording it restarts itself and keeps adding sentences until you tap again.
+function voiceStop(){
+  const rec = VOICE.rec; if (!rec) return;
+  VOICE.active = false; clearTimeout(VOICE.maxT);
+  try { rec.stop(); } catch(e){ voiceFinish(); }
+}
+function voiceFinish(){
+  const f = VOICE.f, i = VOICE.i;
+  VOICE.rec = null; VOICE.active = false; clearTimeout(VOICE.maxT);
+  const b = voiceBtn(f, i); if (b) { b.classList.remove("rec"); b.setAttribute("aria-label", "Dictate a note"); }
+}
+function voiceStart(f, i){
+  if (VOICE.rec) { const same = VOICE.f === f && String(VOICE.i) === String(i); voiceStop(); if (same) return; }
+  const s = editorSession(); if (!s) return;
+  VOICE.f = f; VOICE.i = i; VOICE.active = true;
+  VOICE.base = f === "snotes" ? (s.notes || "") : ((s.exercises[i] || {}).notes || "");
+  VOICE.maxT = setTimeout(voiceStop, 3 * 60 * 1000);   // safety: stops by itself after 3 minutes
+  if (!voiceListen()) return;
+  const b = voiceBtn(f, i); if (b) { b.classList.add("rec"); b.setAttribute("aria-label", "Stop dictation"); }
+  if (navigator.vibrate) try { navigator.vibrate(30); } catch(e){}
+}
+function voiceListen(){
+  const f = VOICE.f, i = VOICE.i;
+  const rec = new SR();
+  rec.lang = VOICE.lang; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+  VOICE.rec = rec;
+  let finalText = "", fatal = false;
+  rec.onresult = ev => {
+    let fin = "", interim = "";
+    for (let k = 0; k < ev.results.length; k++) { const r = ev.results[k]; if (r.isFinal) fin += " " + r[0].transcript; else interim += " " + r[0].transcript; }
+    finalText = fin;
+    const ta = document.querySelector(voiceSel(f, i));
+    if (ta) { ta.value = voiceTidy(VOICE.base, fin + " " + interim); autosize(ta); }  // live preview while you speak
+  };
+  rec.onerror = ev => {
+    if (ev.error === "no-speech" || ev.error === "aborted") return;       // silence: keep listening
+    fatal = true;
+    const msg = {"not-allowed": "Microphone blocked. Allow it in Android settings → Apps → Gym Buddy → Permissions.", "service-not-allowed": "Microphone blocked. Allow it in Android settings → Apps → Gym Buddy → Permissions.", "network": "Voice notes need an internet connection.", "audio-capture": "No microphone found."}[ev.error];
+    toast(msg || "Dictation stopped.");
+  };
+  rec.onend = () => {
+    if (VOICE.rec !== rec) return;
+    if (finalText.trim()) { VOICE.base = voiceTidy(VOICE.base, finalText); voiceWrite(VOICE.base); }
+    const stillHere = document.querySelector(voiceSel(f, i)) && editorSession();
+    if (VOICE.active && !fatal && stillHere) { if (!voiceListen()) voiceFinish(); }
+    else voiceFinish();
+  };
+  try { rec.start(); return true; } catch(e) { voiceFinish(); toast("Couldn't start the microphone."); return false; }
+}
 function startWith(user){
   if (S.db) return;
   document.body.classList.remove("signedout");
@@ -750,7 +832,7 @@ function renderEditor(s){
   if (s.phase && /ramp|deload/i.test(s.phase) && !past) h += `<div class="banner acc">${esc(s.phase)}</div>`;
   h += (s.exercises||[]).map((ex, i) => renderExercise(s, ex, i)).join("");
   h += `<button class="btn block ghost" data-act="addEx" style="margin:4px 0 14px">+ Add exercise</button>`;
-  h += `<h2>Session notes</h2><textarea data-f="snotes" placeholder="Sleep, energy, anything worth remembering">${esc(s.notes)}</textarea>`;
+  h += `<h2>Session notes</h2>${noteBox(`<textarea data-f="snotes" placeholder="Sleep, energy, anything worth remembering">${esc(s.notes)}</textarea>`, "snotes", null)}`;
   h += `<div class="row" style="margin-top:16px;gap:10px">`;
   if (!past) h += `<button class="btn primary" style="flex:1;min-height:54px;font-size:18px" data-act="finish">Finish workout</button>`;
   h += `<button class="btn danger ghost" data-act="delSession">Delete</button></div>`;
@@ -801,7 +883,7 @@ function renderExercise(s, ex, i){
       }).join("")}
     </div>
     <div class="tools"><button class="btn sm" data-act="addSet" data-i="${i}">+ Set</button>${sets.length ? `<button class="btn sm ghost" data-act="rmSet" data-i="${i}">− Set</button>` : ""}</div>
-    <textarea data-f="exnotes" data-i="${i}" placeholder="Notes on this exercise" style="margin-top:10px">${esc(ex.notes)}</textarea>
+    <div style="margin-top:10px">${noteBox(`<textarea data-f="exnotes" data-i="${i}" placeholder="Notes on this exercise">${esc(ex.notes)}</textarea>`, "exnotes", i)}</div>
   </div>`;
 }
 // placeholders per set: last time in this program, otherwise start weight + bottom of rep range
@@ -1058,6 +1140,7 @@ document.addEventListener("click", async e => {
   const b = e.target.closest("[data-act]"); if (!b) return;
   const act = b.dataset.act, i = b.dataset.i != null ? +b.dataset.i : null, j = b.dataset.j != null ? +b.dataset.j : null;
   const s = editorSession();
+  if (act === "mic") { voiceStart(b.dataset.f, i); return; }
   switch (act) {
     case "pickWeek": pickWeek(); return;
     case "preview": S.previewDay = b.dataset.day; render(); window.scrollTo(0,0); return;
