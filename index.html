@@ -112,8 +112,10 @@ h2{font:600 15px/1.2 var(--sans);color:var(--ink2);margin:22px 2px 10px}
 .sp span small{font:500 12px var(--sans);color:var(--ink3);margin-left:3px}
 .sp.old span{color:var(--old)}
 .sets{display:grid;grid-template-columns:26px 1fr 1fr 62px 52px;gap:7px;align-items:center;margin-top:10px}
+textarea{field-sizing:content;min-height:42px}
 .bwrow{display:grid;grid-template-columns:auto 84px auto;gap:8px;align-items:center;margin-top:10px}
 .bwrow input{width:100%;height:42px;border-radius:11px;border:1px solid var(--line);background:var(--bg);text-align:center;font:600 20px/1 var(--cond);font-variant-numeric:tabular-nums}
+.bwrow input.on{color:var(--accent);border-color:var(--accent-line)}
 .bwrow input:focus{outline:none;border-color:var(--ink2)}
 .bwrow label{font-size:14px;color:var(--ink2)}.bwrow span{font-size:13px;color:var(--ink3)}
 .bwrow small{grid-column:1/-1;font-size:12.5px;color:var(--ink3);line-height:1.35}
@@ -533,6 +535,24 @@ async function loadLastBackup(){
     S.lastBackup = data && data[0] ? data[0].taken_at : null; if (S.tab === "program") softRender(); } catch(e){}
 }
 async function signOut(){ try { await SB.auth.signOut(); } catch(e){} location.reload(); }
+/* ---------- keyboard recorder: notes what happened when a field loses focus ---------- */
+const KB = {renders: [], events: [], vv: [], saveT: null};
+function kbLog(type, extra){
+  KB.events.push(Object.assign({t: Date.now(), type, vis: document.visibilityState, vh: window.visualViewport ? Math.round(visualViewport.height) : null, ih: innerHeight}, extra || {}));
+  if (KB.events.length > 40) KB.events.shift();
+  clearTimeout(KB.saveT); KB.saveT = setTimeout(kbSave, 1500);
+}
+async function kbSave(){
+  try { if (!SB || !S.user) return; await SB.from("documents").upsert({user_id: S.user.id, collection: "debug", id: "keyboard", data: {ua: navigator.userAgent, standalone: matchMedia("(display-mode: standalone)").matches, at: new Date().toISOString(), events: KB.events, renders: KB.renders, vv: KB.vv.slice(-30)}, updated_at: new Date().toISOString()}); } catch(e){}
+}
+document.addEventListener("focusin", e => { const t = e.target; if (t.dataset && t.dataset.f) kbLog("focus", {field: t.dataset.f}); });
+document.addEventListener("focusout", e => {
+  const t = e.target; if (!(t.dataset && t.dataset.f)) return;
+  const lastR = KB.renders[KB.renders.length - 1];
+  kbLog("blur", {field: t.dataset.f, len: (t.value || "").length, inDom: document.contains(t), to: e.relatedTarget ? (e.relatedTarget.tagName + "." + (e.relatedTarget.className || "")) : null, msSinceRender: lastR ? Date.now() - lastR.t : null, saveState: ($("#savestate") || {}).textContent});
+});
+if (window.visualViewport) visualViewport.addEventListener("resize", () => { KB.vv.push({t: Date.now(), h: Math.round(visualViewport.height), focus: document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.f || document.activeElement.tagName : null}); if (KB.vv.length > 60) KB.vv.shift(); });
+document.addEventListener("visibilitychange", () => kbLog("visibility"));
 function startWith(user){
   if (S.db) return;
   document.body.classList.remove("signedout");
@@ -620,6 +640,17 @@ function suggestDay(){
 
 /* ---------- render root ---------- */
 function render(){
+  KB.renders.push({t: Date.now(), why: (new Error().stack || "").split("\n").slice(2, 5).map(x => x.trim().replace(/https?:\/\/[^ )]+\//, "")).join(" < ")}); if (KB.renders.length > 10) KB.renders.shift();
+  const fa = document.activeElement, keep = fa && fa.dataset && fa.dataset.f && fa.closest("#view") ? {f: fa.dataset.f, i: fa.dataset.i, j: fa.dataset.j, a: fa.selectionStart, b: fa.selectionEnd} : null;
+  renderInner();
+  if (keep) {
+    const sel = `[data-f="${keep.f}"]` + (keep.i != null ? `[data-i="${keep.i}"]` : "") + (keep.j != null ? `[data-j="${keep.j}"]` : "");
+    const el = document.querySelector("#view " + sel);
+    if (el) { el.focus({preventScroll: true}); try { el.setSelectionRange(keep.a, keep.b); } catch(e){} }
+    kbLog("render-while-typing", {field: keep.f});
+  }
+}
+function renderInner(){
   document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === S.tab));
   const v = $("#view");
   if (!S.loaded) { v.innerHTML = `<div class="loading">Loading your training…</div>`; return; }
@@ -774,7 +805,7 @@ function renderExercise(s, ex, i){
         <button class="btn sm" data-act="up" data-i="${i}">↑ Move up</button><button class="btn sm" data-act="down" data-i="${i}">↓ Move down</button>
         <button class="btn sm" data-act="rename" data-i="${i}">Swap or rename</button><button class="btn sm danger" data-act="removeEx" data-i="${i}">Remove</button></div>` : ""}
     ${last}
-    ${isBWEx(ex.name) ? `<div class="bwrow"><label for="bw${i}">Body weight</label><input id="bw${i}" inputmode="decimal" data-f="bw" data-i="${i}" value="${fmtNum(ex.bw)}" placeholder="${fmtNum(lastBW(s.id)) || ""}" aria-label="Body weight kg"><span>kg</span><small>Progress charts count body weight + added kg.</small></div>` : ""}
+    ${isBWEx(ex.name) ? `<div class="bwrow"><label for="bw${i}">Body weight</label><input id="bw${i}" inputmode="decimal" data-f="bw" data-i="${i}" value="${fmtNum(ex.bw)}" class="${sets.some(st => st.done) ? "on" : ""}" placeholder="${fmtNum(lastBW(s.id)) || ""}" aria-label="Body weight kg"><span>kg</span><small>Progress charts count body weight + added kg.</small></div>` : ""}
     <div class="sets">
       <div></div><div class="h">${isBWEx(ex.name) ? "+kg" : "kg"}</div><div class="h">reps</div><div class="h">RIR</div><div></div>
       ${sets.map((st, j) => {
@@ -1170,7 +1201,11 @@ document.addEventListener("input", e => {
 });
 document.addEventListener("change", e => { if (e.target.id === "progSel") { S.progressEx = e.target.value; render(); } });
 function rerenderEditor(){ const y = window.scrollY; render(); window.scrollTo(0, y); }
-function autosize(t){ t.style.height = "auto"; t.style.height = Math.max(42, t.scrollHeight + 2) + "px"; }
+function autosize(t){
+  if (CSS.supports && CSS.supports("field-sizing", "content")) return; // the browser sizes it (see CSS)
+  if (t.scrollHeight > t.clientHeight) t.style.height = (t.scrollHeight + 2) + "px";
+  else if (document.activeElement !== t) { t.style.height = "auto"; t.style.height = Math.max(42, t.scrollHeight + 2) + "px"; }
+}
 function autosizeAll(){ document.querySelectorAll("textarea:not(.code)").forEach(autosize); }
 let toastT;
 function toast(msg){
