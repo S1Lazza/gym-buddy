@@ -180,6 +180,18 @@ select{width:100%;height:50px;border-radius:12px;border:1px solid var(--line);ba
 .chg{margin-left:auto;font:700 20px/1 var(--cond);color:var(--ink2);white-space:nowrap}
 .chg.up{color:var(--accent)}
 .chg + .chev{margin-left:10px}
+.mustitle{font:700 20px/1.1 var(--cond)}
+.musnav{margin:8px 0 6px}
+.muswk{font:700 16px var(--cond);color:var(--accent);text-align:center;flex:1}
+.iconbtn:disabled{opacity:.25}
+.musrow{display:grid;grid-template-columns:86px 1fr 58px;gap:10px;align-items:center;padding:6px 0}
+.musname{font-size:14px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.musbar{position:relative;height:12px;border-radius:6px;background:var(--surface2);overflow:visible}
+.musbar .zone{position:absolute;top:0;bottom:0;background:#c6f43226;border-left:1px dashed #c6f43266;border-right:1px dashed #c6f43266}
+.musbar .fill{position:absolute;left:0;top:0;bottom:0;background:var(--accent);border-radius:6px}
+.musbar .plan{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:var(--ink);border-radius:1px}
+.musnum{font:700 17px var(--cond);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.musnum small{font:600 14px var(--cond);color:var(--ink3)}
 .pushcard{border-color:var(--accent-line);background:var(--accent-soft)}
 .legend{display:flex;gap:14px;font-size:13px;color:var(--ink2);margin-top:8px}
 .legend span{display:inline-flex;align-items:center;gap:5px}
@@ -373,6 +385,7 @@ function parseProgram(text){
       else if ((k = f.match(/^rir\s*:?\s*(.+)$/i))) ex.rir = k[1].trim().replace(/-/g,"–");
       else if ((k = f.match(/^rest\s*:?\s*(.+)$/i))) { ex.rest = parseRest(k[1]); ex.restLabel = k[1].trim(); }
       else if ((k = f.match(/^start\s*:?\s*(.+)$/i))) ex.start = k[1].trim();
+      else if ((k = f.match(/^muscles?\s*:?\s*(.+)$/i))) ex.muscles = parseMuscles(k[1]);
       else P.errors.push(`Line ${i+1}: didn't understand "${f}"`);
     });
     day.exercises.push(ex);
@@ -510,12 +523,17 @@ function renderLogin(msg){
     if (error) { m.style.color = "var(--danger)"; m.textContent = error.message; return; }
     if (!data.session) { m.style.color = "var(--accent)"; m.textContent = "Account created. Confirm it from the email you'll receive, then sign in here."; } };
 }
+async function loadLastBackup(){
+  try { const {data} = await SB.from("document_backups").select("taken_at").order("taken_at", {ascending: false}).limit(1);
+    S.lastBackup = data && data[0] ? data[0].taken_at : null; if (S.tab === "program" && !S.editProgram) render(); } catch(e){}
+}
 async function signOut(){ try { await SB.auth.signOut(); } catch(e){} location.reload(); }
 function startWith(user){
   if (S.db) return;
   document.body.classList.remove("signedout");
   S.user = user;
   setTimeout(refreshPush, 3000);
+  setTimeout(loadLastBackup, 1500);
   const db = window.makeStore(SB, user.id, st => {
     if (st === "ok") setSaveState("ok", "Saved");
     else if (st === "busy") setSaveState("busy", "Saving…");
@@ -804,6 +822,97 @@ $("#tPlus").onclick = () => { T.end += 15000; T.total += 15; T.fired = false; $(
 $("#tClose").onclick = stopTimer;
 
 
+
+/* ---------- muscles: which muscles each exercise trains (main = 1 set, helper = 1/2) ---------- */
+const MUSCLES = ["Chest", "Back", "Front delts", "Side delts", "Rear delts", "Biceps", "Triceps", "Quads", "Hamstrings", "Glutes", "Calves", "Abs"];
+const MUSCLE_RULES = [
+  [/rear delt|face pull|reverse fl/, {"Rear delts": 1}],
+  [/lateral raise|side raise|upright row/, {"Side delts": 1}],
+  [/calf/, {Calves: 1}],
+  [/crunch|leg raise|plank|ab wheel|sit.?up/, {Abs: 1}],
+  [/hip thrust|glute bridge/, {Glutes: 1, Hamstrings: .5}],
+  [/romanian|\brdl\b|stiff.?leg|good morning/, {Hamstrings: 1, Glutes: .5}],
+  [/leg curl|hamstring curl|nordic/, {Hamstrings: 1}],
+  [/deadlift/, {Glutes: 1, Hamstrings: 1, Back: .5}],
+  [/split squat|lunge|step.?up/, {Quads: 1, Glutes: 1}],
+  [/squat|leg press|leg extension/, {Quads: 1, Glutes: .5}],
+  [/skull|tricep|pushdown|kickback|close.?grip|\bdips?\b/, {Triceps: 1, Chest: .5, "Front delts": .5}],
+  [/curl/, {Biceps: 1}],
+  [/pull.?up|chin.?up|pulldown|lat pull/, {Back: 1, Biceps: .5}],
+  [/row/, {Back: 1, Biceps: .5, "Rear delts": .5}],
+  [/shoulder press|overhead press|military|arnold/, {"Front delts": 1, "Side delts": .5, Triceps: .5}],
+  [/\bfl(y|ies)\b|pec deck|crossover/, {Chest: 1}],
+  [/bench|press|push.?up/, {Chest: 1, Triceps: .5, "Front delts": .5}],
+];
+// isolation tweaks: pure triceps work doesn't train chest
+const TRICEPS_ONLY = /skull|tricep|pushdown|kickback/;
+function parseMuscles(t){
+  const out = {};
+  t.split(",").forEach(part => {
+    const m = part.trim().match(/^(.+?)(?:\s+([\d.]+))?$/); if (!m) return;
+    const name = MUSCLES.find(x => x.toLowerCase() === m[1].trim().toLowerCase()) || m[1].trim().replace(/^./, c => c.toUpperCase());
+    out[name] = m[2] ? +m[2] : 1;
+  });
+  return out;
+}
+function musclesFor(name, pe){
+  if (pe && pe.muscles) return pe.muscles;
+  const n = String(name).toLowerCase();
+  if (TRICEPS_ONLY.test(n)) return {Triceps: 1};
+  for (const [re, m] of MUSCLE_RULES) if (re.test(n)) return m;
+  return {};
+}
+const mondayISO = iso => { const d = parseISO(iso); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return isoOf(d); };
+const addDaysISO = (iso, n) => { const d = parseISO(iso); d.setDate(d.getDate() + n); return isoOf(d); };
+function planFor(prog){
+  if (prog === S.P.name) return S.P;
+  const a = [...S.archive.values()].find(x => x.name === prog);
+  return a ? parseProgram(a.text) : null;
+}
+function weekStartsOf(prog){
+  const list = sessionsOf(prog), plan = planFor(prog);
+  let first = list.length ? mondayISO(list[list.length - 1].date) : null, last = list.length ? mondayISO(list[0].date) : null;
+  if (prog === S.P.name) { const today = mondayISO(todayISO()); if (plan && plan.start) first = first && first < mondayISO(plan.start) ? first : mondayISO(plan.start); last = !last || today > last ? today : last; if (!first) first = today; }
+  if (!first) return [];
+  const out = []; for (let w = first; w <= last; w = addDaysISO(w, 7)) out.push(w);
+  return out;
+}
+function renderMuscleWeek(prog){
+  const weeks = weekStartsOf(prog); if (!weeks.length) return "";
+  if (S.musProg !== prog) { S.musProg = prog; S.musIdx = weeks.length - 1; }
+  S.musIdx = Math.max(0, Math.min(weeks.length - 1, S.musIdx));
+  const wk = weeks[S.musIdx], end = addDaysISO(wk, 6), plan = planFor(prog), isCur = prog === S.P.name;
+  const cw = isCur && plan && plan.start ? currentWeek(plan, wk) : null;
+  const done = {}, planned = {};
+  sortedSessions().filter(x => x.program === prog && x.date >= wk && x.date <= end).forEach(x => (x.exercises||[]).forEach(e => {
+    const n = filledSets(e).filter(st => (st.reps || 0) > 0).length; if (!n) return;
+    const m = musclesFor(e.name, plan ? (plan.days.flatMap(d => d.exercises).find(pe => norm(pe.name) === norm(e.name))) : null);
+    Object.entries(m).forEach(([k, w]) => done[k] = (done[k] || 0) + n * w);
+  }));
+  if (plan) plan.days.forEach(d => d.exercises.forEach(pe => {
+    const n = phaseSets(pe.sets || 0, cw && cw.phase);
+    Object.entries(musclesFor(pe.name, pe)).forEach(([k, w]) => planned[k] = (planned[k] || 0) + n * w);
+  }));
+  const rows = MUSCLES.concat(Object.keys(done).concat(Object.keys(planned)).filter(k => !MUSCLES.includes(k)))
+    .filter((k, i, a) => a.indexOf(k) === i && ((done[k] || 0) > 0 || (planned[k] || 0) > 0));
+  const max = Math.max(22, ...rows.map(k => Math.max(done[k] || 0, planned[k] || 0)));
+  const pct = v => Math.min(100, v / max * 100);
+  const f = v => { const r = Math.round(v * 2) / 2; return r % 1 ? String(r).replace(".5", "½") : String(r); };
+  const label = `${cw && cw.week ? "Week " + cw.week + ", " : ""}${fmtDate(wk)} – ${fmtDate(end)}`;
+  return `<div class="card muscard">
+    <div class="row between"><div class="mustitle">Weekly sets per muscle</div></div>
+    <div class="row between musnav">
+      <button class="iconbtn" data-act="musPrev" ${S.musIdx === 0 ? "disabled" : ""} aria-label="Previous week">‹</button>
+      <div class="muswk">${label}</div>
+      <button class="iconbtn" data-act="musNext" ${S.musIdx === weeks.length - 1 ? "disabled" : ""} aria-label="Next week">›</button>
+    </div>
+    ${rows.length ? rows.map(k => `<div class="musrow"><span class="musname">${esc(k)}</span>
+      <span class="musbar"><i class="zone" style="left:${pct(10)}%;width:${pct(20) - pct(10)}%"></i><i class="fill" style="width:${pct(done[k] || 0)}%"></i>${planned[k] ? `<i class="plan" style="left:${pct(planned[k])}%"></i>` : ""}</span>
+      <span class="musnum">${f(done[k] || 0)}<small>${planned[k] ? " / " + f(planned[k]) : ""}</small></span></div>`).join("") : `<div class="faint small" style="padding:8px 0">No sets logged this week.</div>`}
+    <div class="faint small" style="margin-top:10px;line-height:1.5">Done / planned sets. Main muscle counts 1 set, helper muscles ½. Shaded band: 10–20 sets a week. The white tick is the plan.</div>
+  </div>`;
+}
+
 /* ---------- week picker ---------- */
 function mondayOf(d){ const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
 function isoOf(d){ return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
@@ -1003,6 +1112,8 @@ document.addEventListener("click", async e => {
       if (await saveProgram(text)) { S.editProgram = false; S.programView = P.name; render(); toast(P.name !== oldName ? "New program started. " + oldName + " is kept in Programs." : "Program saved"); }
       return;
     }
+    case "musPrev": S.musIdx--; rerenderEditor(); return;
+    case "musNext": S.musIdx++; rerenderEditor(); return;
     case "pushOn": enablePush(); return;
     case "pushOff": disablePush(); return;
     case "pushLater": localStorage.setItem("gb_push_dismissed", "1"); render(); return;
@@ -1163,6 +1274,7 @@ function renderProgressExercises(prog){
   const groups = programDayGroups(prog);
   let h = `<button class="btn sm ghost" data-act="progBackPrograms" style="margin:-4px 0 10px -10px">‹ All programs</button>
     <div class="title2">${esc(prog)}</div><div class="muted small" style="margin-top:4px">Pick an exercise to see its progress.</div>`;
+  h += `<div style="margin-top:14px">${renderMuscleWeek(prog)}</div>`;
   if (!groups.length) return h + `<div class="card empty" style="margin-top:14px">Nothing logged in this program yet.</div>`;
   groups.forEach(g => {
     h += `<h2><span style="font:700 22px var(--cond);color:var(--ink)">${esc(g.day)}</span></h2>`;
@@ -1323,7 +1435,8 @@ function renderProgramList2(){
   <div class="card"><div class="muted small" style="margin-bottom:12px">Signed in as ${esc(S.user ? S.user.email : "")}</div>
     <div class="row between" style="margin-bottom:12px"><div><div style="font-weight:600">Rest alerts on the lock screen</div><div class="faint small">${!pushSupported() ? "Not supported in this browser" : Notification.permission === "denied" ? "Blocked in Android settings" : pushOn() ? "On" : "Off"}</div></div>
       ${pushSupported() && Notification.permission !== "denied" ? (pushOn() ? `<button class="btn sm ghost" data-act="pushOff">Turn off</button>` : `<button class="btn sm" data-act="pushOn">Turn on</button>`) : ""}</div>
-    <button class="btn block" data-act="exportBackup">Export backup</button>
+    <div class="row between" style="margin-bottom:12px"><div><div style="font-weight:600">Automatic backup</div><div class="faint small">Every Sunday night, last 8 weeks kept${S.lastBackup ? `. Last: ${fmtDate(S.lastBackup.slice(0, 10), true)}` : ""}</div></div></div>
+    <button class="btn block" data-act="exportBackup">Export a copy to this phone</button>
     <button class="btn block ghost" data-act="signOut" style="margin-top:8px">Sign out</button></div>`;
 }
 function renderProgram(P, isCur, archiveId){
