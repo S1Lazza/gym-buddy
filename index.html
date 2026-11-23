@@ -535,25 +535,8 @@ async function loadLastBackup(){
     S.lastBackup = data && data[0] ? data[0].taken_at : null; if (S.tab === "program") softRender(); } catch(e){}
 }
 async function signOut(){ try { await SB.auth.signOut(); } catch(e){} location.reload(); }
-const APP_VERSION = "23 Nov 19:05";
-/* ---------- keyboard recorder: notes what happened when a field loses focus ---------- */
-const KB = {renders: [], events: [], vv: [], saveT: null};
-function kbLog(type, extra){
-  KB.events.push(Object.assign({t: Date.now(), type, vis: document.visibilityState, vh: window.visualViewport ? Math.round(visualViewport.height) : null, ih: innerHeight}, extra || {}));
-  if (KB.events.length > 40) KB.events.shift();
-  clearTimeout(KB.saveT); KB.saveT = setTimeout(kbSave, 1500);
-}
-async function kbSave(){
-  try { if (!SB || !S.user) return; await SB.from("documents").upsert({user_id: S.user.id, collection: "debug", id: "keyboard", data: {ua: navigator.userAgent, standalone: matchMedia("(display-mode: standalone)").matches, at: new Date().toISOString(), events: KB.events, renders: KB.renders, vv: KB.vv.slice(-30)}, updated_at: new Date().toISOString()}); } catch(e){}
-}
-document.addEventListener("focusin", e => { const t = e.target; if (t.dataset && t.dataset.f) kbLog("focus", {field: t.dataset.f}); });
-document.addEventListener("focusout", e => {
-  const t = e.target; if (!(t.dataset && t.dataset.f)) return;
-  const lastR = KB.renders[KB.renders.length - 1];
-  kbLog("blur", {field: t.dataset.f, len: (t.value || "").length, inDom: document.contains(t), to: e.relatedTarget ? (e.relatedTarget.tagName + "." + (e.relatedTarget.className || "")) : null, msSinceRender: lastR ? Date.now() - lastR.t : null, saveState: ($("#savestate") || {}).textContent});
-});
-if (window.visualViewport) visualViewport.addEventListener("resize", () => { KB.vv.push({t: Date.now(), h: Math.round(visualViewport.height), focus: document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.f || document.activeElement.tagName : null}); if (KB.vv.length > 60) KB.vv.shift(); });
-document.addEventListener("visibilitychange", () => kbLog("visibility"));
+
+const APP_VERSION = "23 Nov 19:10";
 function startWith(user){
   if (S.db) return;
   document.body.classList.remove("signedout");
@@ -568,9 +551,9 @@ function startWith(user){
   });
   S.db = db;
   let gotSessions = false, gotProgram = false;
-  const slow = setTimeout(() => { if (!gotSessions || !gotProgram) { setSaveState("busy", "Offline, saved on phone"); S.loaded = true; render(); } }, 10000);
+  const slow = setTimeout(() => { if (!gotSessions || !gotProgram) { setSaveState("busy", "Offline, saved on phone"); if (S.loaded) softRender(); else { S.loaded = true; render(); } } }, 10000);
   let firstDone = false;
-  const done = () => { if (gotSessions && gotProgram && !firstDone) { firstDone = true; clearTimeout(slow); S.loaded = true; render(); } };
+  const done = () => { if (gotSessions && gotProgram && !firstDone) { firstDone = true; clearTimeout(slow); if (S.loaded) softRender(); else { S.loaded = true; render(); } } };
   db.doc("program/current").onSnapshot(snap => {
     if (snap.exists) { const d = snap.data(); if (d.text !== S.programText && !S.editProgram) { S.programText = d.text; S.P = parseProgram(d.text); if (gotProgram) softRender(); } }
     if (!snap.metadata.fromCache) { gotProgram = true; done(); }
@@ -641,14 +624,12 @@ function suggestDay(){
 
 /* ---------- render root ---------- */
 function render(){
-  KB.renders.push({t: Date.now(), why: (new Error().stack || "").split("\n").slice(2, 5).map(x => x.trim().replace(/https?:\/\/[^ )]+\//, "")).join(" < ")}); if (KB.renders.length > 10) KB.renders.shift();
   const fa = document.activeElement, keep = fa && fa.dataset && fa.dataset.f && fa.closest("#view") ? {f: fa.dataset.f, i: fa.dataset.i, j: fa.dataset.j, a: fa.selectionStart, b: fa.selectionEnd} : null;
   renderInner();
   if (keep) {
     const sel = `[data-f="${keep.f}"]` + (keep.i != null ? `[data-i="${keep.i}"]` : "") + (keep.j != null ? `[data-j="${keep.j}"]` : "");
     const el = document.querySelector("#view " + sel);
     if (el) { el.focus({preventScroll: true}); try { el.setSelectionRange(keep.a, keep.b); } catch(e){} }
-    kbLog("render-while-typing", {field: keep.f});
   }
 }
 function renderInner(){
