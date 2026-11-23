@@ -535,6 +535,7 @@ async function loadLastBackup(){
     S.lastBackup = data && data[0] ? data[0].taken_at : null; if (S.tab === "program") softRender(); } catch(e){}
 }
 async function signOut(){ try { await SB.auth.signOut(); } catch(e){} location.reload(); }
+const APP_VERSION = "23 Nov 19:05";
 /* ---------- keyboard recorder: notes what happened when a field loses focus ---------- */
 const KB = {renders: [], events: [], vv: [], saveT: null};
 function kbLog(type, extra){
@@ -1498,7 +1499,8 @@ function renderProgramList2(){
       ${pushSupported() && Notification.permission !== "denied" ? (pushOn() ? `<button class="btn sm ghost" data-act="pushOff">Turn off</button>` : `<button class="btn sm" data-act="pushOn">Turn on</button>`) : ""}</div>
     <div class="row between" style="margin-bottom:12px"><div><div style="font-weight:600">Automatic backup</div><div class="faint small">Every Sunday night, last 8 weeks kept${S.lastBackup ? `. Last: ${fmtDate(S.lastBackup.slice(0, 10), true)}` : ""}</div></div></div>
     <button class="btn block" data-act="exportBackup">Export a copy to this phone</button>
-    <button class="btn block ghost" data-act="signOut" style="margin-top:8px">Sign out</button></div>`;
+    <button class="btn block ghost" data-act="signOut" style="margin-top:8px">Sign out</button>
+    <div class="faint small" style="margin-top:10px;text-align:center">App version ${APP_VERSION}</div></div>`;
 }
 function renderProgram(P, isCur, archiveId){
   const cw = isCur ? currentWeek(P) : null, list = sessionsOf(P.name);
