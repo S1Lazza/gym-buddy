@@ -180,6 +180,7 @@ select{width:100%;height:50px;border-radius:12px;border:1px solid var(--line);ba
 .chg{margin-left:auto;font:700 20px/1 var(--cond);color:var(--ink2);white-space:nowrap}
 .chg.up{color:var(--accent)}
 .chg + .chev{margin-left:10px}
+.pushcard{border-color:var(--accent-line);background:var(--accent-soft)}
 .legend{display:flex;gap:14px;font-size:13px;color:var(--ink2);margin-top:8px}
 .legend span{display:inline-flex;align-items:center;gap:5px}
 table.t{width:100%;border-collapse:collapse;font-size:14px}
@@ -514,6 +515,7 @@ function startWith(user){
   if (S.db) return;
   document.body.classList.remove("signedout");
   S.user = user;
+  setTimeout(refreshPush, 3000);
   const db = window.makeStore(SB, user.id, st => {
     if (st === "ok") setSaveState("ok", "Saved");
     else if (st === "busy") setSaveState("busy", "Saving…");
@@ -592,6 +594,7 @@ function render(){
   else if (S.tab === "program") v.innerHTML = renderProgramTab();
   $("#title").textContent = S.tab === "today" ? "" : ({history:"History",progress:"Progress",program:"Programs"})[S.tab];
   autosizeAll();
+  syncWake();
 }
 function weeksTotal(P, cw){
   if (P.length) return Math.max(P.length, cw ? cw.week : 1);
@@ -694,6 +697,7 @@ function renderEditor(s){
       <div class="sub">${sub}${isOld ? ` <span class="tag old">${esc(s.program)}</span>` : ""}</div>
       ${past ? "" : `<div class="bar"><i style="width:${c.total ? c.done / c.total * 100 : 0}%"></i></div>`}
     </div>`;
+  if (!past) h += pushBanner();
   if (s.phase && /ramp|deload/i.test(s.phase) && !past) h += `<div class="banner acc">${esc(s.phase)}</div>`;
   h += (s.exercises||[]).map((ex, i) => renderExercise(s, ex, i)).join("");
   h += `<button class="btn block ghost" data-act="addEx" style="margin:4px 0 14px">+ Add exercise</button>`;
@@ -777,9 +781,12 @@ function startTimer(sec, label){
   T.total = sec; T.end = Date.now() + sec*1000; T.label = label; T.fired = false;
   $("#timer").classList.remove("go"); $("#timer").style.display = "flex";
   clearInterval(T.iv); T.iv = setInterval(tick, 250); tick();
+  alarmSet();
 }
 function tick(){
   const left = Math.round((T.end - Date.now())/1000);
+  // app is on screen near the end: it beeps itself, so cancel the lock-screen alert
+  if (left <= 2 && T.alarm && document.visibilityState === "visible") alarmClear();
   if (left <= 0) {
     $("#tTime").textContent = "Go!"; $("#tWhat").textContent = "Rest done · " + T.label; $("#tBar").style.width = "100%";
     $("#timer").classList.add("go");
@@ -791,9 +798,9 @@ function tick(){
   $("#tWhat").textContent = "Rest · " + T.label;
   $("#tBar").style.width = (100 - left / T.total * 100) + "%";
 }
-function stopTimer(){ clearInterval(T.iv); $("#timer").style.display = "none"; }
-$("#tMinus").onclick = () => { T.end -= 15000; tick(); };
-$("#tPlus").onclick = () => { T.end += 15000; T.total += 15; T.fired = false; $("#timer").classList.remove("go"); tick(); };
+function stopTimer(){ clearInterval(T.iv); $("#timer").style.display = "none"; if (T.alarm) alarmClear(); }
+$("#tMinus").onclick = () => { T.end -= 15000; tick(); if (T.end > Date.now()) alarmSet(); };
+$("#tPlus").onclick = () => { T.end += 15000; T.total += 15; T.fired = false; $("#timer").classList.remove("go"); tick(); alarmSet(); };
 $("#tClose").onclick = stopTimer;
 
 
@@ -832,6 +839,57 @@ function pickWeek(){
     if (await saveProgram(text)) { render(); toast("You're in week " + w); }
   });
 }
+
+
+/* ---------- rest alerts on the lock screen (web push) + screen stays awake ---------- */
+const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const pushOn = () => pushSupported() && Notification.permission === "granted" && localStorage.getItem("gb_push") === "1";
+async function alarmSet(){
+  if (!SB || !S.user || !pushOn() || T.end <= Date.now()) return;
+  T.alarm = true;
+  try { await SB.from("rest_alarms").upsert({user_id: S.user.id, id: "current", fire_at: new Date(T.end).toISOString(), title: "Rest done", body: T.label || "Time for the next set"}); } catch(e){}
+}
+async function alarmClear(){
+  T.alarm = false;
+  if (!SB || !S.user) return;
+  try { await SB.from("rest_alarms").delete().eq("id", "current"); } catch(e){}
+}
+function b64ToBytes(b64){ const p = "=".repeat((4 - b64.length % 4) % 4), raw = atob((b64 + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(raw, c => c.charCodeAt(0)); }
+async function subscribePush(){
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    const sess = (await SB.auth.getSession()).data.session;
+    const r = await fetch(SUPABASE_URL + "/functions/v1/rest-push?action=key", {headers: {Authorization: "Bearer " + sess.access_token, apikey: SUPABASE_KEY}});
+    const {publicKey} = await r.json();
+    sub = await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: b64ToBytes(publicKey)});
+  }
+  const j = sub.toJSON();
+  const {error} = await SB.from("push_subscriptions").upsert({user_id: S.user.id, endpoint: j.endpoint, subscription: j});
+  if (error) throw error;
+}
+async function enablePush(){
+  if (!pushSupported()) { toast("This browser can't show rest alerts"); return; }
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") { localStorage.setItem("gb_push_dismissed", "1"); toast("Notifications are blocked. You can allow them in Android settings → Apps → Gym Buddy."); render(); return; }
+  try { await subscribePush(); localStorage.setItem("gb_push", "1"); toast("Rest alerts are on"); }
+  catch(e){ toast("Couldn't turn on rest alerts. Try again with a connection."); }
+  render();
+}
+function disablePush(){ localStorage.setItem("gb_push", "0"); localStorage.setItem("gb_push_dismissed", "1"); alarmClear(); render(); toast("Rest alerts are off"); }
+// keep the device subscription fresh (it can change after Chrome updates)
+function refreshPush(){ if (pushOn() && navigator.onLine !== false) subscribePush().catch(() => {}); }
+function pushBanner(){
+  if (!pushSupported() || pushOn() || localStorage.getItem("gb_push_dismissed") === "1" || Notification.permission === "denied") return "";
+  return `<div class="card pushcard"><div style="font-weight:700;font-size:16px">Rest alerts with the phone locked</div>
+    <div class="muted small" style="margin:4px 0 12px">Get a notification when your rest is over, even with the screen off or the phone in your pocket.</div>
+    <div class="row"><button class="btn primary sm" data-act="pushOn" style="flex:1">Turn on</button><button class="btn ghost sm" data-act="pushLater">Not now</button></div></div>`;
+}
+let WL = null;
+async function wakeOn(){ try { if (!("wakeLock" in navigator) || WL || document.visibilityState !== "visible") return; WL = await navigator.wakeLock.request("screen"); WL.addEventListener("release", () => { WL = null; }); } catch(e){ WL = null; } }
+function wakeOff(){ try { if (WL) WL.release(); } catch(e){} WL = null; }
+function syncWake(){ if (S.db && activeSession()) wakeOn(); else wakeOff(); }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") syncWake(); });
 
 /* ---------- modal ---------- */
 function modal({title, body = "", input = null, buttons}){
@@ -945,6 +1003,9 @@ document.addEventListener("click", async e => {
       if (await saveProgram(text)) { S.editProgram = false; S.programView = P.name; render(); toast(P.name !== oldName ? "New program started. " + oldName + " is kept in Programs." : "Program saved"); }
       return;
     }
+    case "pushOn": enablePush(); return;
+    case "pushOff": disablePush(); return;
+    case "pushLater": localStorage.setItem("gb_push_dismissed", "1"); render(); return;
     case "exportBackup": {
       const blob = new Blob([JSON.stringify(S.db.exportAll(), null, 1)], {type: "application/json"});
       const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "gym-buddy-backup-" + todayISO() + ".json";
@@ -1260,6 +1321,8 @@ function renderProgramList2(){
   }).join("") + `<p class="faint small" style="margin:14px 4px">To start a new program, open the current one, tap Edit and change its name on the first line. The old plan moves here automatically.</p>
   <h2>Account</h2>
   <div class="card"><div class="muted small" style="margin-bottom:12px">Signed in as ${esc(S.user ? S.user.email : "")}</div>
+    <div class="row between" style="margin-bottom:12px"><div><div style="font-weight:600">Rest alerts on the lock screen</div><div class="faint small">${!pushSupported() ? "Not supported in this browser" : Notification.permission === "denied" ? "Blocked in Android settings" : pushOn() ? "On" : "Off"}</div></div>
+      ${pushSupported() && Notification.permission !== "denied" ? (pushOn() ? `<button class="btn sm ghost" data-act="pushOff">Turn off</button>` : `<button class="btn sm" data-act="pushOn">Turn on</button>`) : ""}</div>
     <button class="btn block" data-act="exportBackup">Export backup</button>
     <button class="btn block ghost" data-act="signOut" style="margin-top:8px">Sign out</button></div>`;
 }
