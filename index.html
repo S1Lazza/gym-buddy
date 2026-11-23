@@ -112,6 +112,11 @@ h2{font:600 15px/1.2 var(--sans);color:var(--ink2);margin:22px 2px 10px}
 .sp span small{font:500 12px var(--sans);color:var(--ink3);margin-left:3px}
 .sp.old span{color:var(--old)}
 .sets{display:grid;grid-template-columns:26px 1fr 1fr 62px 52px;gap:7px;align-items:center;margin-top:10px}
+.bwrow{display:grid;grid-template-columns:auto 84px auto;gap:8px;align-items:center;margin-top:10px}
+.bwrow input{width:100%;height:42px;border-radius:11px;border:1px solid var(--line);background:var(--bg);text-align:center;font:600 20px/1 var(--cond);font-variant-numeric:tabular-nums}
+.bwrow input:focus{outline:none;border-color:var(--ink2)}
+.bwrow label{font-size:14px;color:var(--ink2)}.bwrow span{font-size:13px;color:var(--ink3)}
+.bwrow small{grid-column:1/-1;font-size:12.5px;color:var(--ink3);line-height:1.35}
 .sets .h{font-size:13px;color:var(--ink3);text-align:center}
 .sets .i{font:700 17px/1 var(--cond);color:var(--ink3);text-align:center}
 .sets input{width:100%;height:48px;border-radius:11px;border:1px solid var(--line);background:var(--bg);text-align:center;font:600 22px/1 var(--cond);padding:0 4px;-moz-appearance:textfield;font-variant-numeric:tabular-nums}
@@ -596,6 +601,14 @@ function lastPerf(name, {excludeId, beforeDate, current, needSets}){
   }
   return null;
 }
+// bodyweight exercises: sets store ADDED kg (empty = 0), ex.bw stores body weight; charts use the total
+const isBWEx = name => /\b(chin.?ups?|pull.?ups?|dips?|push.?ups?|inverted rows?|muscle.?ups?)\b/i.test(name||"") && !/\b(db|dumbbells?|barbell|machine|cable|press|assisted|band)\b/i.test(name||"");
+const loadOf = (ex, st) => isBWEx(ex.name) && ex.bw != null ? ex.bw + (st.kg || 0) : st.kg;
+const kgTxt = (name, kg) => isBWEx(name) ? (kg ? "+" + fmtNum(kg) : "BW") : (kg != null ? fmtNum(kg) : "BW");
+function lastBW(excludeId){
+  for (const s of sortedSessions()) { if (s.id === excludeId) continue; const e = (s.exercises||[]).find(x => x.bw != null); if (e) return e.bw; }
+  return null;
+}
 const fmtSet = st => (st.kg != null ? fmtNum(st.kg) : "BW") + "×" + (st.reps ?? "?") + (st.rir != null ? ` <span class="faint">@${st.rir}</span>` : "");
 function suggestDay(){
   const P = S.P; if (!P.days.length) return null;
@@ -634,8 +647,8 @@ function weekBlock(){
     <div class="ticks" aria-label="Week ${cw.week} of ${total}">${ticks}</div></button>`;
 }
 // set chips: "80 × 5" with RIR in small text
-function setPills(sets, old){
-  return `<div class="sp ${old ? "old" : ""}">${sets.map(st => `<span>${st.kg != null ? fmtNum(st.kg) : "BW"} × ${st.reps ?? "?"}${st.rir != null ? `<small>RIR ${st.rir}</small>` : ""}</span>`).join("")}</div>`;
+function setPills(sets, old, name){
+  return `<div class="sp ${old ? "old" : ""}">${sets.map(st => `<span>${kgTxt(name, st.kg)} × ${st.reps ?? "?"}${st.rir != null ? `<small>RIR ${st.rir}</small>` : ""}</span>`).join("")}</div>`;
 }
 function targetChips(nSets, pe, fallback){
   if (!pe) return fallback ? `<div class="targets"><span class="tg">${esc(fallback)}</span></div>` : "";
@@ -672,7 +685,7 @@ function renderDayPreview(name){
     h += `<div class="card" style="margin-top:14px">` + d.exercises.map(e => {
       const cur = lastPerf(e.name, {needSets: true});
       const sets = phaseSets(e.sets, cw && cw.phase);
-      const info = cur ? `<span class="lastline">Last${cur.isCur ? "" : " (" + esc(cur.s.program) + ")"}: ${cur.sets.map(x => (x.kg != null ? fmtNum(x.kg) : "BW") + "×" + (x.reps ?? "?")).join(", ")}</span>` : (e.start ? `Start weight ${esc(e.start)}` : "");
+      const info = cur ? `<span class="lastline">Last${cur.isCur ? "" : " (" + esc(cur.s.program) + ")"}: ${cur.sets.map(x => kgTxt(e.name, x.kg) + "×" + (x.reps ?? "?")).join(", ")}</span>` : (e.start ? `Start weight ${esc(e.start)}` : "");
       const meta = [e.rir ? "RIR " + esc(e.rir) : "", e.restLabel ? "rest " + esc(e.restLabel) : ""].filter(Boolean).join(", ");
       return `<div class="pex"><span>${e.label ? `<span class="lbl ${e.group ? "" : "plain"}">${esc(e.label)}</span>` : ""}</span><span class="nm">${esc(e.name)}</span><span class="s">${sets} × ${esc(e.reps)}</span>
         <span class="sub">${meta}${info ? `<br>${info}` : ""}</span></div>`;
@@ -694,7 +707,7 @@ function startSession(dayName){
 }
 function newExercise(pe, phase){
   const n = phaseSets(pe.sets || 3, phase);
-  return {name: pe.name, label: pe.label || "", group: pe.group || null, target: targetText(pe), rest: pe.rest, notes: "",
+  return {name: pe.name, label: pe.label || "", group: pe.group || null, target: targetText(pe), rest: pe.rest, notes: "", ...(isBWEx(pe.name) ? {bw: lastBW()} : {}),
     sets: Array.from({length: n}, () => ({kg: null, reps: null, rir: null, done: false}))};
 }
 function targetText(pe){
@@ -740,7 +753,7 @@ function renderExercise(s, ex, i){
     const otherProg = prev.s.program !== s.program, otherDay = prev.s.day !== s.day;
     const src = otherProg ? prev.s.program : (otherDay ? prev.s.day : "");
     last = `<div class="last"><div class="k">Last time <span>${fmtDate(prev.s.date)}${src ? ", " + esc(src) : ""}</span></div>
-      ${setPills(prev.sets, otherProg)}
+      ${setPills(prev.sets, otherProg, ex.name)}${prev.ex.bw != null && isBWEx(ex.name) ? `<div class="n">Body weight then: ${fmtNum(prev.ex.bw)} kg</div>` : ""}
       ${prev.ex.notes ? `<div class="n">${esc(prev.ex.notes)}</div>` : ""}
       ${otherProg ? `<div class="why">From another program, so sets and reps may differ from today's target.${pe && pe.start ? ` Program start weight: ${esc(pe.start)}.` : ""}</div>` : (otherDay ? `<div class="why">Done on a different day, so sets and reps may differ.</div>` : "")}
     </div>`;
@@ -761,8 +774,9 @@ function renderExercise(s, ex, i){
         <button class="btn sm" data-act="up" data-i="${i}">↑ Move up</button><button class="btn sm" data-act="down" data-i="${i}">↓ Move down</button>
         <button class="btn sm" data-act="rename" data-i="${i}">Swap or rename</button><button class="btn sm danger" data-act="removeEx" data-i="${i}">Remove</button></div>` : ""}
     ${last}
+    ${isBWEx(ex.name) ? `<div class="bwrow"><label for="bw${i}">Body weight</label><input id="bw${i}" inputmode="decimal" data-f="bw" data-i="${i}" value="${fmtNum(ex.bw)}" placeholder="${fmtNum(lastBW(s.id)) || ""}" aria-label="Body weight kg"><span>kg</span><small>Progress charts count body weight + added kg.</small></div>` : ""}
     <div class="sets">
-      <div></div><div class="h">kg</div><div class="h">reps</div><div class="h">RIR</div><div></div>
+      <div></div><div class="h">${isBWEx(ex.name) ? "+kg" : "kg"}</div><div class="h">reps</div><div class="h">RIR</div><div></div>
       ${sets.map((st, j) => {
         const p = ph[j] || {}, on = st.done ? "on" : "";
         return `<div class="i ${on}">${j+1}</div>
@@ -1044,6 +1058,7 @@ document.addEventListener("click", async e => {
       ensureAudio();
       const ex = s.exercises[i], st = ex.sets[j];
       if (!st.done) {
+        if (isBWEx(ex.name) && ex.bw == null) { ex.bw = lastBW(s.id); }
         const row = b.parentElement;
         ["kg","reps"].forEach(f => { const inp = row.querySelector(`input[data-f="${f}"][data-i="${i}"][data-j="${j}"]`); if (st[f] == null && inp && inp.placeholder !== "") { st[f] = num(inp.placeholder); inp.value = inp.placeholder; } });
         st.done = true; b.classList.add("on");
@@ -1147,6 +1162,7 @@ document.addEventListener("input", e => {
   const i = t.dataset.i != null ? +t.dataset.i : null, j = t.dataset.j != null ? +t.dataset.j : null;
   if (f === "kg" || f === "reps" || f === "rir") { s.exercises[i].sets[j][f] = f === "kg" ? num(t.value) : (num(t.value) == null ? null : Math.round(num(t.value))); }
   else if (f === "exnotes") s.exercises[i].notes = t.value;
+  else if (f === "bw") s.exercises[i].bw = num(t.value);
   else if (f === "snotes") s.notes = t.value;
   else if (f === "sdate") { if (t.value) s.date = t.value; else return; }
   else return;
@@ -1193,7 +1209,7 @@ function renderHistory(){
     const exs = (s.exercises||[]).filter(ex => filledSets(ex).length);
     const rows = exs.slice(0, 6).map(ex => {
       const fs = filledSets(ex), best = fs.reduce((a, b) => ((b.kg||0) > (a.kg||0) || ((b.kg||0) === (a.kg||0) && (b.reps||0) > (a.reps||0))) ? b : a);
-      return `<span class="e">${esc(ex.name)}</span><span class="b">${best.kg != null ? fmtNum(best.kg) : "BW"} × ${best.reps ?? "?"} <small>${fs.length} set${fs.length === 1 ? "" : "s"}</small></span>`;
+      return `<span class="e">${esc(ex.name)}</span><span class="b">${kgTxt(ex.name, best.kg)} × ${best.reps ?? "?"} <small>${fs.length} set${fs.length === 1 ? "" : "s"}</small></span>`;
     }).join("");
     const sub = s.week ? `<span class="faint small">Week ${s.week}</span>` : "";
     h += `<button class="card hitem" data-act="hopen" data-id="${esc(s.id)}">
@@ -1212,7 +1228,7 @@ function seriesFor(name, prog){
   const key = norm(name), pts = [];
   [...S.sessions.values()].filter(s => (s.status === "done" || s.status === "active") && (prog == null || s.program === prog)).sort((a,b) => a.date.localeCompare(b.date)).forEach(s => {
     const ex = (s.exercises||[]).find(e => norm(e.name) === key); if (!ex) return;
-    const sets = filledSets(ex).filter(x => x.reps);
+    const sets = filledSets(ex).filter(x => x.reps).map(x => ({...x, kg: loadOf(ex, x)}));
     if (!sets.length) return;
     const withKg = sets.filter(x => x.kg != null);
     pts.push({s, ex, sets, isCur: s.program === S.P.name,
@@ -1323,7 +1339,8 @@ function renderProgressDetail(prog){
   const changeTxt = pctChange != null ? sign(pctChange) + (Math.round(pctChange * 10) / 10) + "%" : (delta == null ? "—" : sign(delta) + fv(delta));
   const repsTag = p => metric === "top" ? `<small> × ${fmtNum(Math.round(p.avgReps*10)/10)}</small>` : "";
   const up = (pctChange ?? delta ?? 0) > 0;
-  const caption = metric === "e1rm" ? "Estimated max in kg, averaged over all sets with RIR included." : metric === "top" ? "Heaviest weight per session in kg. Below it: the average reps you did at that weight." : esc(METRICS[metric]);
+  const bwNote = isBWEx(S.progressEx) ? " Weight here is body weight plus added weight." : "";
+  const caption = (metric === "e1rm" ? "Estimated max in kg, averaged over all sets with RIR included." : metric === "top" ? "Heaviest weight per session in kg. Below it: the average reps you did at that weight." : esc(METRICS[metric])) + bwNote;
   // programs that also have this exercise, for comparing
   const others = progressPrograms().filter(pn => pn !== prog && seriesFor(S.progressEx, pn).some(p => p[metric] != null));
   if (others.length && metric !== "reps") h += `<button class="btn block ${S.compare ? "primary" : ""}" data-act="toggleCompare" style="margin:0 0 12px">${S.compare ? "✓ Comparing, tap to stop" : `Compare with ${others.length === 1 ? esc(others[0]) : "another program"}`}</button>`;
