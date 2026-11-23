@@ -113,9 +113,13 @@ h2{font:600 15px/1.2 var(--sans);color:var(--ink2);margin:22px 2px 10px}
 .sp.old span{color:var(--old)}
 .sets{display:grid;grid-template-columns:26px 1fr 1fr 62px 52px;gap:7px;align-items:center;margin-top:10px}
 textarea{field-sizing:content;min-height:42px}
+.datefull{display:block;width:100%;height:54px;background:var(--bg);border:1px solid var(--line);border-radius:11px;padding:0 14px;font-size:17px;color-scheme:dark}
+.endrow{margin-top:18px;gap:10px;align-items:stretch}
+.endrow .btn{min-height:54px;font-size:18px}
+.endrow .btn.primary{flex:1}
 .notebox{position:relative}
-.notebox textarea{padding-right:56px}
-.mic{position:absolute;right:6px;top:6px;width:42px;height:42px;border-radius:11px;display:grid;place-items:center;color:var(--ink2);background:var(--surface);border:1px solid var(--line)}
+.notebox textarea{padding-right:56px;min-height:54px;display:block}
+.mic{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:11px;display:grid;place-items:center;color:var(--ink2);background:var(--surface);border:1px solid var(--line)}
 .mic svg{width:20px;height:20px}
 .mic.rec{color:#111;background:var(--accent);border-color:var(--accent);animation:micpulse 1.2s ease-in-out infinite}
 @keyframes micpulse{50%{box-shadow:0 0 0 7px var(--accent-line)}}
@@ -544,7 +548,7 @@ async function loadLastBackup(){
 }
 async function signOut(){ try { await SB.auth.signOut(); } catch(e){} location.reload(); }
 
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.1.3";
 /* ---------- voice notes: tap the mic, speak, the words are added to the note ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const VOICE = {rec: null, f: null, i: null, base: "", lang: "en-US", active: false, maxT: null};
@@ -570,8 +574,14 @@ function voiceTidy(base, said){
   if (/\n\s*$/.test(base)) return base + said;
   return base.replace(/\s+$/, "").replace(/([^.!?])$/, "$1.") + " " + said;
 }
-// tap to start, tap again to stop (like WhatsApp). The phone's recogniser ends after each pause,
-// so while recording it restarts itself and keeps adding sentences until you tap again.
+// tap to start, tap again to stop (like WhatsApp). One continuous listening session, so Android
+// plays its sound only at the start and the end. If the phone ends it on its own (long silence),
+// it quietly restarts until you tap again.
+// save finished sentences while still recording, without touching the live text on screen
+function voiceSaveSoon(text){
+  clearTimeout(VOICE.saveT);
+  VOICE.saveT = setTimeout(() => { const s = editorSession(); if (!s) return; if (VOICE.f === "snotes") s.notes = text; else if (s.exercises[VOICE.i]) s.exercises[VOICE.i].notes = text; else return; queueSave(s); }, 800);
+}
 function voiceStop(){
   const rec = VOICE.rec; if (!rec) return;
   VOICE.active = false; clearTimeout(VOICE.maxT);
@@ -595,15 +605,22 @@ function voiceStart(f, i){
 function voiceListen(){
   const f = VOICE.f, i = VOICE.i;
   const rec = new SR();
-  rec.lang = VOICE.lang; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+  rec.lang = VOICE.lang; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
   VOICE.rec = rec;
-  let finalText = "", fatal = false;
+  let segs = [], fatal = false;
+  // some Android versions repeat everything said so far in each new result: keep the longest version
+  const merge = (list, t) => { t = t.trim(); if (!t) return list; const last = list[list.length - 1]; if (last && t.toLowerCase().startsWith(last.toLowerCase())) list[list.length - 1] = t; else if (!(last && last.toLowerCase().startsWith(t.toLowerCase()))) list.push(t); return list; };
+  const withSegs = (base, list) => list.reduce((acc, t) => voiceTidy(acc, t), base);
   rec.onresult = ev => {
-    let fin = "", interim = "";
-    for (let k = 0; k < ev.results.length; k++) { const r = ev.results[k]; if (r.isFinal) fin += " " + r[0].transcript; else interim += " " + r[0].transcript; }
-    finalText = fin;
+    const fin = [], inter = [];
+    for (let k = 0; k < ev.results.length; k++) { const r = ev.results[k]; if (r.isFinal) merge(fin, r[0].transcript); else inter.push(r[0].transcript); }
+    segs = fin;
+    let preview = inter.join(" ").trim();
+    const said = fin.join(" ");
+    if (said && preview.toLowerCase().startsWith(said.toLowerCase())) preview = preview.slice(said.length);
     const ta = document.querySelector(voiceSel(f, i));
-    if (ta) { ta.value = voiceTidy(VOICE.base, fin + " " + interim); autosize(ta); }  // live preview while you speak
+    if (ta) { ta.value = withSegs(VOICE.base, preview.trim() ? [...fin, preview] : fin); autosize(ta); }  // live preview while you speak
+    if (fin.length) voiceSaveSoon(withSegs(VOICE.base, fin));
   };
   rec.onerror = ev => {
     if (ev.error === "no-speech" || ev.error === "aborted") return;       // silence: keep listening
@@ -613,7 +630,8 @@ function voiceListen(){
   };
   rec.onend = () => {
     if (VOICE.rec !== rec) return;
-    if (finalText.trim()) { VOICE.base = voiceTidy(VOICE.base, finalText); voiceWrite(VOICE.base); }
+    clearTimeout(VOICE.saveT);
+    if (segs.length) { VOICE.base = withSegs(VOICE.base, segs); voiceWrite(VOICE.base); }
     const stillHere = document.querySelector(voiceSel(f, i)) && editorSession();
     if (VOICE.active && !fatal && stillHere) { if (!voiceListen()) voiceFinish(); }
     else voiceFinish();
@@ -833,10 +851,10 @@ function renderEditor(s){
   h += (s.exercises||[]).map((ex, i) => renderExercise(s, ex, i)).join("");
   h += `<button class="btn block ghost" data-act="addEx" style="margin:4px 0 14px">+ Add exercise</button>`;
   h += `<h2>Session notes</h2>${noteBox(`<textarea data-f="snotes" placeholder="Sleep, energy, anything worth remembering">${esc(s.notes)}</textarea>`, "snotes", null)}`;
-  h += `<div class="row" style="margin-top:16px;gap:10px">`;
-  if (!past) h += `<button class="btn primary" style="flex:1;min-height:54px;font-size:18px" data-act="finish">Finish workout</button>`;
-  h += `<button class="btn danger ghost" data-act="delSession">Delete</button></div>`;
-  if (past) h += `<div class="row" style="margin-top:10px"><span class="muted small" style="flex:1">Date</span><input type="date" data-f="sdate" value="${esc(s.date)}" style="background:var(--surface);border:1px solid var(--line);border-radius:10px;height:40px;padding:0 10px"></div>`;
+  if (past) h += `<h2>Date</h2><input type="date" data-f="sdate" value="${esc(s.date)}" class="datefull">`;
+  h += `<div class="row endrow">
+    <button class="btn danger ghost" data-act="delSession">Delete</button>
+    ${past ? `<button class="btn primary" data-act="closeEdit">Done</button>` : `<button class="btn primary" data-act="finish">Finish workout</button>`}</div>`;
   return h;
 }
 function renderExercise(s, ex, i){
