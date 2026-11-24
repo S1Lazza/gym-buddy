@@ -137,7 +137,8 @@ textarea{field-sizing:content;min-height:42px}
 .cline{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:8px;font-size:13px;color:var(--ink3)}
 .cline b{color:var(--ink2);font-weight:600}
 .newprog{display:flex;align-items:center;gap:14px;width:100%;text-align:left;margin:0 0 12px}
-.newprog .plus{flex:none;width:40px;height:40px;border-radius:12px;background:var(--accent);color:#111;display:grid;place-items:center;font:700 26px/1 var(--cond)}
+.newprog .plus{flex:none;width:40px;height:40px;border-radius:12px;background:var(--accent);color:#111;display:grid;place-items:center}
+.newprog .plus svg{display:block}
 .newprog > span:nth-child(2){flex:1;min-width:0}
 .newprog .t{display:block;font:700 22px/1.1 var(--cond)}
 .newprog .sub{display:block;font-size:13px;color:var(--ink3);margin-top:3px}
@@ -640,7 +641,7 @@ async function loadLastBackup(){
 }
 async function signOut(){ try { await SB.auth.signOut(); } catch(e){} location.reload(); }
 
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.4.1";
 /* ---------- voice notes: tap the mic, speak, the words are added to the note ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const VOICE = {rec: null, f: null, i: null, base: "", lang: "en-US", active: false, maxT: null};
@@ -1920,7 +1921,7 @@ function renderProgramList2(){
   sortedSessions().forEach(x => { if (x.program && x.program !== S.P.name) { const t = parseISO(x.date).getTime(); others.set(x.program, Math.max(others.get(x.program) || 0, t)); } });
   [...others.entries()].sort((a, b) => b[1] - a[1]).forEach(([n]) => names.push(n));
   const cw = currentWeek(S.P);
-  return `<button class="card newprog" data-act="newProgram"><span class="plus" aria-hidden="true">+</span><span><span class="t">New program</span><span class="sub">From scratch or a copy of the current one</span></span><span class="chev">›</span></button>` + names.map((n, i) => {
+  return `<button class="card newprog" data-act="newProgram"><span class="plus" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/></svg></span><span><span class="t">New program</span><span class="sub">From scratch or a copy of the current one</span></span><span class="chev">›</span></button>` + names.map((n, i) => {
     const cur = i === 0, list = sessionsOf(n), hasPlan = cur || [...S.archive.values()].some(a => a.name === n);
     const sub = cur ? (cw && cw.week ? `Week ${cw.week}, started ${fmtDate(S.P.start)}` : S.P.start ? `Starts ${fmtDate(S.P.start, true)}` : "")
       : [list.length ? `${list.length} sessions, ${rangeOf(list)}` : "", hasPlan ? "" : "no plan saved"].filter(Boolean).join(", ");
