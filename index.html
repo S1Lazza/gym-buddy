@@ -90,6 +90,8 @@ h2{font:600 15px/1.2 var(--sans);color:var(--ink2);margin:22px 2px 10px}
 /* workout header */
 .whead{position:sticky;top:0;z-index:5;background:linear-gradient(var(--bg) 85%,transparent);padding:4px 0 12px;margin:-4px 0 4px}
 .whead .t{font:700 34px/1 var(--cond)}
+/* Barlow Condensed sits low in its line box: move the header button down to the visual middle of the title's letters (measured ~0.09em of the title) */
+.whead .row.between > .btn{position:relative;top:3px}
 .whead .sub{color:var(--ink2);font-size:14px;margin-top:4px}
 .bar{height:6px;border-radius:3px;background:var(--surface2);overflow:hidden;margin-top:10px}
 .bar i{display:block;height:100%;background:var(--accent);border-radius:3px;transition:width .3s}
@@ -565,7 +567,7 @@ async function loadLastBackup(){
 }
 async function signOut(){ try { await SB.auth.signOut(); } catch(e){} location.reload(); }
 
-const APP_VERSION = "1.2.2";
+const APP_VERSION = "1.2.3";
 /* ---------- voice notes: tap the mic, speak, the words are added to the note ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const VOICE = {rec: null, f: null, i: null, base: "", lang: "en-US", active: false, maxT: null};
@@ -864,7 +866,7 @@ const CHECKS = [
 function renderCheckinScreen(){
   const c = S.checkin, r = c.ready, starting = c.mode === "start";
   const sub = starting ? `${esc(c.day)}, ${fmtDate(c.date, true)}` : "Edit this session's ratings";
-  return `<div class="cscreen"><div class="whead"><div class="row between"><div class="t">How you came in</div>${starting ? `<button class="btn sm" data-act="checkinBack">Back</button>` : ""}</div><div class="sub">${sub}. Optional.</div></div>` +
+  return `<div class="cscreen"><div class="whead"><div class="row between"><div class="t">How you feel</div>${starting ? `<button class="btn sm" data-act="checkinBack">Back</button>` : ""}</div><div class="sub">${sub}. Optional.</div></div>` +
     CHECKS.map(q => `<section class="cq"><div class="qh"><h3>${q.name}</h3><span>${q.when}</span></div>
       <div class="cbtns" role="group" aria-label="${q.name}">${[1,2,3,4,5].map(v => `<button class="${r[q.k] === v ? "on" : ""}" data-act="rate" data-k="${q.k}" data-v="${v}" aria-pressed="${r[q.k] === v}">${v}</button>`).join("")}</div>
       <div class="ends"><span>1&nbsp;${q.lo}</span><span>5&nbsp;${q.hi}</span></div></section>`).join("") +
@@ -887,7 +889,7 @@ function renderEditor(s){
     </div>`;
   if (!past) h += pushBanner();
   if (s.phase && /ramp|deload/i.test(s.phase) && !past) h += `<div class="banner acc">${esc(s.phase)}</div>`;
-  h += `<button class="cedit" data-act="checkinEdit">${checkinLine(s) || `<div class="cline">How you came in: not rated</div>`}<span class="chg">Edit</span></button>`;
+  h += `<button class="cedit" data-act="checkinEdit">${checkinLine(s) || `<div class="cline">How you feel: not rated</div>`}<span class="chg">Edit</span></button>`;
   h += (s.exercises||[]).map((ex, i) => renderExercise(s, ex, i)).join("");
   h += `<button class="btn block ghost" data-act="addEx" style="margin:4px 0 14px">+ Add exercise</button>`;
   h += `<h2>Session notes</h2>${noteBox(`<textarea data-f="snotes" placeholder="How it went, anything worth remembering">${esc(s.notes)}</textarea>`, "snotes", null)}`;
