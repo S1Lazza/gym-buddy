@@ -223,7 +223,7 @@ textarea:focus{outline:none;border-color:var(--ink2)}
 /* nav */
 nav.tabs{position:fixed;left:0;right:0;bottom:0;background:#0e1012f2;backdrop-filter:blur(8px);border-top:1px solid var(--line);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom);z-index:20}
 nav.tabs .in{display:flex;max-width:560px;width:100%;position:relative}
-.ver{text-align:right;margin:14px 4px 0;font-size:12px;color:var(--ink3);font-variant-numeric:tabular-nums}
+.ver{display:block;margin:14px 4px 0 auto;padding:4px 0;background:none;border:none;font-size:12px;color:var(--ink3);font-variant-numeric:tabular-nums;text-decoration:underline;text-underline-offset:3px}
 nav.tabs button{flex:1;padding:10px 0 9px;font-size:13px;color:var(--ink3);display:flex;flex-direction:column;align-items:center;gap:3px;font-weight:600}
 nav.tabs button.on{color:var(--accent)}
 nav.tabs svg{width:22px;height:22px}
@@ -239,6 +239,11 @@ nav.tabs svg{width:22px;height:22px}
 #modal{position:fixed;inset:0;background:#000b;display:none;align-items:flex-end;justify-content:center;z-index:50}
 #modal .sheet{background:var(--surface);border:1px solid var(--line);border-radius:18px 18px 0 0;width:100%;max-width:560px;padding:18px 16px calc(16px + env(safe-area-inset-bottom))}
 #modal h3{margin:0 0 10px;font:700 22px/1.1 var(--cond)}
+#modal .sheet{max-height:85vh;overflow-y:auto}
+.wn{margin:10px 0 4px}
+.wnv{font:700 15px var(--cond);color:var(--accent)}
+.wn ul{margin:4px 0 0;padding-left:18px}
+.wn li{font-size:15px;line-height:1.45;color:var(--ink);margin:3px 0}
 #modal input[type=text]{width:100%;height:48px;border-radius:11px;border:1px solid var(--line);background:var(--bg);padding:0 12px;font-size:16px}
 #modal .acts{display:flex;gap:8px;margin-top:14px;justify-content:flex-end}
 #modal .acts.stack{flex-direction:column-reverse}
@@ -655,7 +660,49 @@ async function loadLastBackup(){
 }
 async function signOut(){ try { await SB.auth.signOut(); } catch(e){} location.reload(); }
 
-const APP_VERSION = "1.5.0";
+const APP_VERSION = "1.6.0"; // raise with every update, and add an entry to CHANGELOG
+/* ---------- what's new: shown once after an update (never on a fresh install) ---------- */
+const CHANGELOG = [
+  {v: "1.6.0", items: ["After each update, this screen shows what changed, once.", "Tap the version number at the bottom of Programs to see every change."]},
+  {v: "1.5.1", items: ["Sets per muscle in a program: plain bars, yellow for what's planned."]},
+  {v: "1.5.0", items: ["Each program shows its sets per muscle for a normal week, updating live while you edit it.", "History is grouped by week. Tap a week to see done vs planned sets per muscle.", "Progress now only has your lifts and the program comparison."]},
+  {v: "1.4.3", items: ["Supersets: when you skip the first exercise, the rest timer stays on the one you're doing."]},
+  {v: "1.4.2", items: ["× button to clear a note in one tap, with Undo."]},
+  {v: "1.4.1", items: ["The + on New program is properly centred."]},
+  {v: "1.4.0", items: ["Build and edit programs like a workout: tap an exercise to change sets, reps, RIR and rest, add days and exercises, pair supersets.", "Edit as text is still there for pasting a whole program."]},
+  {v: "1.3.1", items: ["Delete a program, or make an older one current again."]},
+  {v: "1.3.0", items: ["New program button at the top of Programs."]},
+  {v: "1.2.3", items: ["The check-in is called How you feel.", "Header buttons line up with the title."]},
+  {v: "1.2.2", items: ["The check-in fits on one screen."]},
+  {v: "1.2.1", items: ["The check-in has its own screen before the workout. Edit it from the line at the top of a session."]},
+  {v: "1.2.0", items: ["Check-in before a workout: sleep, nutrition, stress and recovery, 1 to 5. Shown in History."]},
+  {v: "1.1.3", items: ["Cleaner end of a past workout: Date, then Delete and Done side by side."]},
+  {v: "1.1.2", items: ["Mic button centred in the notes box."]},
+  {v: "1.1.1", items: ["Voice notes: one sound at the start and one at the end."]},
+  {v: "1.1.0", items: ["Voice notes: tap the mic, speak, tap again to stop."]},
+  {v: "1.0.2", items: ["App version at the bottom of Programs."]},
+  {v: "1.0.1", items: ["The keyboard no longer closes while you type notes.", "Updates reach your phone on the next launch."]},
+];
+const verCmp = (a, b) => { const x = String(a).split(".").map(Number), y = String(b).split(".").map(Number); for (let k = 0; k < 3; k++) if ((x[k] || 0) !== (y[k] || 0)) return (x[k] || 0) - (y[k] || 0); return 0; };
+const WN = (() => {
+  let seen = null, existing = false;
+  try { seen = localStorage.getItem("gb_seen_version"); existing = Object.keys(localStorage).some(k => k.startsWith("gb_cache_")); } catch(e){ return {pending: []}; }
+  if (!seen && !existing) { try { localStorage.setItem("gb_seen_version", APP_VERSION); } catch(e){} return {pending: []}; } // fresh install: nothing to show
+  const pending = !seen ? CHANGELOG.filter(c => c.v === APP_VERSION) : CHANGELOG.filter(c => verCmp(c.v, seen) > 0 && verCmp(c.v, APP_VERSION) <= 0);
+  if (!pending.length) { try { localStorage.setItem("gb_seen_version", APP_VERSION); } catch(e){} }
+  return {pending, shown: false};
+})();
+function changesHTML(list){
+  return list.map(c => `<div class="wn">${list.length > 1 ? `<div class="wnv">v${c.v}</div>` : ""}<ul>${c.items.map(t => `<li>${esc(t)}</li>`).join("")}</ul></div>`).join("");
+}
+async function maybeWhatsNew(){
+  if (!WN.pending.length || WN.shown || !S.loaded) return;
+  if (activeSession() || S.checkin || S.editProgram || S.pb || $("#modal").style.display === "flex") return;  // never during a workout or an edit
+  WN.shown = true;
+  await modal({title: WN.pending.length === 1 ? `What's new in v${APP_VERSION}` : "What's new", body: changesHTML(WN.pending), buttons: [{text: "Got it", cls: "primary", value: true}]});
+  try { localStorage.setItem("gb_seen_version", APP_VERSION); } catch(e){}
+  WN.pending = [];
+}
 /* ---------- voice notes: tap the mic, speak, the words are added to the note ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const VOICE = {rec: null, f: null, i: null, base: "", lang: "en-US", active: false, maxT: null};
@@ -837,6 +884,7 @@ function suggestDay(){
 function render(){
   const fa = document.activeElement, keep = fa && fa.dataset && fa.dataset.f && fa.closest("#view") ? {f: fa.dataset.f, i: fa.dataset.i, j: fa.dataset.j, a: fa.selectionStart, b: fa.selectionEnd} : null;
   renderInner();
+  setTimeout(maybeWhatsNew, 400);
   if (keep) {
     const sel = `[data-f="${keep.f}"]` + (keep.i != null ? `[data-i="${keep.i}"]` : "") + (keep.j != null ? `[data-j="${keep.j}"]` : "");
     const el = document.querySelector("#view " + sel);
@@ -1170,7 +1218,7 @@ function musRows(done, planned, mode){
   return keys.map(k => {
     const d = (done || {})[k] || 0, pl = (planned || {})[k] || 0;
     if (mode === "plan") return `<div class="musrow"><span class="musname">${esc(k)}</span>
-      <span class="musbar"><i class="zone" style="left:${pct(10)}%;width:${pct(20) - pct(10)}%"></i><i class="fill" style="width:${pct(pl)}%"></i></span>
+      <span class="musbar"><i class="fill" style="width:${pct(pl)}%"></i></span>
       <span class="musnum">${fSets(pl)}</span></div>`;
     return `<div class="musrow ${isShort(d, pl) ? "short" : ""}"><span class="musname">${esc(k)}</span>
       <span class="musbar"><i class="zone" style="left:${pct(10)}%;width:${pct(20) - pct(10)}%"></i><i class="fill" style="width:${pct(d)}%"></i>${pl ? `<i class="plan" style="left:${pct(pl)}%"></i>` : ""}</span>
@@ -1180,7 +1228,7 @@ function musRows(done, planned, mode){
 function plannedCardInner(P){
   const rows = musRows(null, plannedSets(P, null), "plan");
   return `<div class="mustitle">Sets per muscle</div>
-    <div class="faint small" style="margin:2px 0 6px">A normal week of this plan. Main muscle counts 1 set, helpers ½. Shaded band: 10–20 sets.</div>
+    <div class="faint small" style="margin:2px 0 6px">A normal week of this plan. Main muscle counts 1 set, helpers ½.</div>
     ${rows || `<div class="faint small" style="padding:6px 0">Add exercises to see the sets per muscle.</div>`}`;
 }
 /* ---------- week picker ---------- */
@@ -1297,6 +1345,7 @@ document.addEventListener("click", async e => {
   const act = b.dataset.act, i = b.dataset.i != null ? +b.dataset.i : null, j = b.dataset.j != null ? +b.dataset.j : null;
   const s = editorSession();
   if (act === "mic") { voiceStart(b.dataset.f, i); return; }
+  if (act === "changelog") { await modal({title: "All changes", body: changesHTML(CHANGELOG), buttons: [{text: "Close", cls: "primary"}]}); return; }
   if (act === "noteClear" && s) {
     const f = b.dataset.f, ex = f === "exnotes" ? s.exercises[i] : null, old = ex ? ex.notes : s.notes;
     if (VOICE.rec && VOICE.f === f && String(VOICE.i) === String(i)) { VOICE.discard = true; VOICE.base = ""; voiceStop(); }
@@ -2000,7 +2049,7 @@ function renderProgramList2(){
     <div class="row between" style="margin-bottom:12px"><div><div style="font-weight:600">Automatic backup</div><div class="faint small">Every Sunday night, last 8 weeks kept${S.lastBackup ? `. Last: ${fmtDate(S.lastBackup.slice(0, 10), true)}` : ""}</div></div></div>
     <button class="btn block" data-act="exportBackup">Export a copy to this phone</button>
     <button class="btn block ghost" data-act="signOut" style="margin-top:8px">Sign out</button></div>
-    <div class="ver">v${APP_VERSION}</div>`;
+    <button class="ver" data-act="changelog">v${APP_VERSION}</button>`;
 }
 function renderProgram(P, isCur, archiveId){
   const cw = isCur ? currentWeek(P) : null, list = sessionsOf(P.name);
