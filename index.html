@@ -280,6 +280,15 @@ select{width:100%;height:50px;border-radius:12px;border:1px solid var(--line);ba
 .muswk{font:700 16px var(--cond);color:var(--accent);text-align:center;flex:1}
 .iconbtn:disabled{opacity:.25}
 .musrow{display:grid;grid-template-columns:86px 1fr 58px;gap:10px;align-items:center;padding:6px 0}
+.musrow.short .musnum{color:#ffb547}
+.musrow.short .musname{color:var(--ink)}
+.hweek{display:flex;align-items:baseline;gap:10px;width:100%;background:none;border:none;color:var(--ink);text-align:left;padding:18px 2px 8px;margin:0}
+.hweek .wl{font:700 20px/1.1 var(--cond);flex:1}
+.hweek .ws{font-size:13px;color:var(--ink3);white-space:nowrap}
+.hweek .ws.warn{color:#ffb547}
+.hweek .chev{color:var(--ink3);font-size:18px;transition:transform .15s}
+.hweek.open .chev{transform:rotate(90deg)}
+.hwbody{margin-bottom:10px}
 .musname{font-size:14px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .musbar{position:relative;height:12px;border-radius:6px;background:var(--surface2);overflow:visible}
 .musbar .zone{position:absolute;top:0;bottom:0;background:#c6f43226;border-left:1px dashed #c6f43266;border-right:1px dashed #c6f43266}
@@ -646,7 +655,7 @@ async function loadLastBackup(){
 }
 async function signOut(){ try { await SB.auth.signOut(); } catch(e){} location.reload(); }
 
-const APP_VERSION = "1.4.3";
+const APP_VERSION = "1.5.0";
 /* ---------- voice notes: tap the mic, speak, the words are added to the note ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const VOICE = {rec: null, f: null, i: null, base: "", lang: "en-US", active: false, maxT: null};
@@ -1133,42 +1142,47 @@ function weekStartsOf(prog){
   const out = []; for (let w = first; w <= last; w = addDaysISO(w, 7)) out.push(w);
   return out;
 }
-function renderMuscleWeek(prog){
-  const weeks = weekStartsOf(prog); if (!weeks.length) return "";
-  if (S.musProg !== prog) { S.musProg = prog; S.musIdx = weeks.length - 1; }
-  S.musIdx = Math.max(0, Math.min(weeks.length - 1, S.musIdx));
-  const wk = weeks[S.musIdx], end = addDaysISO(wk, 6), plan = planFor(prog), isCur = prog === S.P.name;
-  const cw = isCur && plan && plan.start ? currentWeek(plan, wk) : null;
-  const done = {}, planned = {};
-  sortedSessions().filter(x => x.program === prog && x.date >= wk && x.date <= end).forEach(x => (x.exercises||[]).forEach(e => {
-    const n = filledSets(e).filter(st => (st.reps || 0) > 0).length; if (!n) return;
-    const m = musclesFor(e.name, plan ? (plan.days.flatMap(d => d.exercises).find(pe => norm(pe.name) === norm(e.name))) : null);
-    Object.entries(m).forEach(([k, w]) => done[k] = (done[k] || 0) + n * w);
+// sets per muscle: main muscle counts 1 set, helper muscles ½
+function plannedSets(plan, phase){
+  const out = {}; if (!plan) return out;
+  plan.days.forEach(d => d.exercises.forEach(pe => {
+    const n = phaseSets(pe.sets || 0, phase);
+    Object.entries(musclesFor(pe.name, pe)).forEach(([k, w]) => out[k] = (out[k] || 0) + n * w);
   }));
-  if (plan) plan.days.forEach(d => d.exercises.forEach(pe => {
-    const n = phaseSets(pe.sets || 0, cw && cw.phase);
-    Object.entries(musclesFor(pe.name, pe)).forEach(([k, w]) => planned[k] = (planned[k] || 0) + n * w);
-  }));
-  const rows = MUSCLES.concat(Object.keys(done).concat(Object.keys(planned)).filter(k => !MUSCLES.includes(k)))
-    .filter((k, i, a) => a.indexOf(k) === i && ((done[k] || 0) > 0 || (planned[k] || 0) > 0));
-  const max = Math.max(22, ...rows.map(k => Math.max(done[k] || 0, planned[k] || 0)));
-  const pct = v => Math.min(100, v / max * 100);
-  const f = v => { const r = Math.round(v * 2) / 2; return r % 1 ? String(r).replace(".5", "½") : String(r); };
-  const label = `${cw && cw.week ? "Week " + cw.week + ", " : ""}${fmtDate(wk)} – ${fmtDate(end)}`;
-  return `<div class="card muscard">
-    <div class="row between"><div class="mustitle">Weekly sets per muscle</div></div>
-    <div class="row between musnav">
-      <button class="iconbtn" data-act="musPrev" ${S.musIdx === 0 ? "disabled" : ""} aria-label="Previous week">‹</button>
-      <div class="muswk">${label}</div>
-      <button class="iconbtn" data-act="musNext" ${S.musIdx === weeks.length - 1 ? "disabled" : ""} aria-label="Next week">›</button>
-    </div>
-    ${rows.length ? rows.map(k => `<div class="musrow"><span class="musname">${esc(k)}</span>
-      <span class="musbar"><i class="zone" style="left:${pct(10)}%;width:${pct(20) - pct(10)}%"></i><i class="fill" style="width:${pct(done[k] || 0)}%"></i>${planned[k] ? `<i class="plan" style="left:${pct(planned[k])}%"></i>` : ""}</span>
-      <span class="musnum">${f(done[k] || 0)}<small>${planned[k] ? " / " + f(planned[k]) : ""}</small></span></div>`).join("") : `<div class="faint small" style="padding:8px 0">No sets logged this week.</div>`}
-    <div class="faint small" style="margin-top:10px;line-height:1.5">Done / planned sets. Main muscle counts 1 set, helper muscles ½. Shaded band: 10–20 sets a week. The white tick is the plan.</div>
-  </div>`;
+  return out;
 }
-
+function doneSets(sessions, plan){
+  const out = {}, pes = plan ? plan.days.flatMap(d => d.exercises) : [];
+  sessions.forEach(x => (x.exercises||[]).forEach(e => {
+    const n = filledSets(e).filter(st => (st.reps || 0) > 0).length; if (!n) return;
+    Object.entries(musclesFor(e.name, pes.find(pe => norm(pe.name) === norm(e.name)))).forEach(([k, w]) => out[k] = (out[k] || 0) + n * w);
+  }));
+  return out;
+}
+const fSets = v => { const r = Math.round(v * 2) / 2; return r % 1 ? String(r).replace(".5", "½") : String(r); };
+const isShort = (done, planned) => planned > 0 && done < planned - 0.25;
+function musRows(done, planned, mode){
+  // mode "plan": planned only; "week": done / planned
+  const keys = MUSCLES.concat(Object.keys(done || {}).concat(Object.keys(planned || {})).filter(k => !MUSCLES.includes(k)))
+    .filter((k, i, a) => a.indexOf(k) === i && (((done || {})[k] || 0) > 0 || ((planned || {})[k] || 0) > 0));
+  const max = Math.max(22, ...keys.map(k => Math.max((done || {})[k] || 0, (planned || {})[k] || 0)));
+  const pct = v => Math.min(100, v / max * 100);
+  return keys.map(k => {
+    const d = (done || {})[k] || 0, pl = (planned || {})[k] || 0;
+    if (mode === "plan") return `<div class="musrow"><span class="musname">${esc(k)}</span>
+      <span class="musbar"><i class="zone" style="left:${pct(10)}%;width:${pct(20) - pct(10)}%"></i><i class="fill" style="width:${pct(pl)}%"></i></span>
+      <span class="musnum">${fSets(pl)}</span></div>`;
+    return `<div class="musrow ${isShort(d, pl) ? "short" : ""}"><span class="musname">${esc(k)}</span>
+      <span class="musbar"><i class="zone" style="left:${pct(10)}%;width:${pct(20) - pct(10)}%"></i><i class="fill" style="width:${pct(d)}%"></i>${pl ? `<i class="plan" style="left:${pct(pl)}%"></i>` : ""}</span>
+      <span class="musnum">${fSets(d)}<small>${pl ? " / " + fSets(pl) : ""}</small></span></div>`;
+  }).join("");
+}
+function plannedCardInner(P){
+  const rows = musRows(null, plannedSets(P, null), "plan");
+  return `<div class="mustitle">Sets per muscle</div>
+    <div class="faint small" style="margin:2px 0 6px">A normal week of this plan. Main muscle counts 1 set, helpers ½. Shaded band: 10–20 sets.</div>
+    ${rows || `<div class="faint small" style="padding:6px 0">Add exercises to see the sets per muscle.</div>`}`;
+}
 /* ---------- week picker ---------- */
 function mondayOf(d){ const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
 function isoOf(d){ return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
@@ -1383,6 +1397,7 @@ document.addEventListener("click", async e => {
       await deleteSession(s.id); S.editingId = null; stopTimer(); if (S.returnTab) { S.tab = S.returnTab; S.returnTab = null; } render(); return;
     }
     case "histProgram": S.historyProgram = b.dataset.p; render(); window.scrollTo(0,0); return;
+    case "histWeek": { const key = S.historyProgram + "|" + b.dataset.w; S.histWeek = S.histWeek === key ? null : key; render(); return; }
     case "histBack": S.historyProgram = null; render(); window.scrollTo(0,0); return;
     case "hopen": S.editingId = b.dataset.id; S.returnTab = "history"; S.tab = "today"; render(); window.scrollTo(0,0); return;
     case "progProgram": S.progressProgram = b.dataset.p; S.progressEx = null; render(); window.scrollTo(0,0); return;
@@ -1471,8 +1486,6 @@ document.addEventListener("click", async e => {
       if (ok) { S.editProgram = false; S.textDraft = null; S.pb = null; render(); window.scrollTo(0,0); }
       return;
     }
-    case "musPrev": S.musIdx--; rerenderEditor(); return;
-    case "musNext": S.musIdx++; rerenderEditor(); return;
     case "pushOn": enablePush(); return;
     case "pushOff": disablePush(); return;
     case "pushLater": localStorage.setItem("gb_push_dismissed", "1"); render(); return;
@@ -1541,6 +1554,23 @@ function renderProgramList(all){
     </button>`;
   }).join("");
 }
+// a week inside a program's history: header with done vs planned sets per muscle (tap to expand)
+function histWeekHead(prog, wk, list){
+  const end = addDaysISO(wk, 6), plan = planFor(prog), isCur = prog === S.P.name;
+  const cw = isCur && plan && plan.start ? currentWeek(plan, wk) : null;
+  const thisWeek = mondayISO(todayISO()) === wk;
+  const ses = list.filter(x => x.date >= wk && x.date <= end);
+  const done = doneSets(ses, plan), planned = plan ? plannedSets(plan, cw && cw.phase) : {};
+  const short = Object.keys(planned).filter(k => isShort(done[k] || 0, planned[k]));
+  const total = Object.values(done).reduce((a, b) => a + b, 0);
+  const sum = !plan ? `${fSets(total)} sets` : thisWeek ? "This week, so far" : short.length ? `${short.length} muscle${short.length === 1 ? "" : "s"} short` : "On plan";
+  const open = S.histWeek === prog + "|" + wk;
+  const label = `${cw && cw.week ? "Week " + cw.week + " · " : ""}${fmtDate(wk)} – ${fmtDate(end)}`;
+  return `<button class="hweek ${open ? "open" : ""}" data-act="histWeek" data-w="${wk}" aria-expanded="${open}">
+      <span class="wl">${label}</span><span class="ws ${!thisWeek && short.length ? "warn" : ""}">${sum}</span><span class="chev" aria-hidden="true">›</span></button>
+    ${open ? `<div class="card muscard hwbody">${musRows(done, planned, "week")}
+      <div class="faint small" style="margin-top:8px;line-height:1.5">${plan ? "Done / planned sets. The white tick is the plan." : "No plan saved for this program, so only the sets done."} Main muscle counts 1 set, helpers ½.</div></div>` : ""}`;
+}
 function renderHistory(){
   const all = sortedSessions();
   if (!all.length) return `<div class="empty">No workouts yet. Start one from the Workout tab.</div>`;
@@ -1550,10 +1580,10 @@ function renderHistory(){
     <div class="title2">${esc(S.historyProgram)}</div>
     <div class="muted small" style="margin:4px 0 4px">${list.length} session${list.length === 1 ? "" : "s"}${list.length ? ", " + (list[0].date === list[list.length-1].date ? fmtDate(list[0].date) : `${fmtDate(list[list.length-1].date)} to ${fmtDate(list[0].date)}`) : ""}</div>`;
   if (!list.length) h += `<div class="empty">No sessions logged in this program yet.</div>`;
-  let lastMonth = "";
+  let lastWeek = "";
   list.forEach(s => {
-    const d = parseISO(s.date), mk = ["January","February","March","April","May","June","July","August","September","October","November","December"][d.getMonth()] + " " + d.getFullYear();
-    if (mk !== lastMonth) { h += `<h2>${mk}</h2>`; lastMonth = mk; }
+    const wk = mondayISO(s.date);
+    if (wk !== lastWeek) { h += histWeekHead(S.historyProgram, wk, list); lastWeek = wk; }
     const exs = (s.exercises||[]).filter(ex => filledSets(ex).length);
     const rows = exs.slice(0, 6).map(ex => {
       const fs = filledSets(ex), best = fs.reduce((a, b) => ((b.kg||0) > (a.kg||0) || ((b.kg||0) === (a.kg||0) && (b.reps||0) > (a.reps||0))) ? b : a);
@@ -1648,7 +1678,6 @@ function renderProgressExercises(prog){
   const groups = programDayGroups(prog);
   let h = `<button class="btn sm ghost" data-act="progBackPrograms" style="margin:-4px 0 10px -10px">‹ All programs</button>
     <div class="title2">${esc(prog)}</div><div class="muted small" style="margin-top:4px">Pick an exercise to see its progress.</div>`;
-  h += `<div style="margin-top:14px">${renderMuscleWeek(prog)}</div>`;
   if (!groups.length) return h + `<div class="card empty" style="margin-top:14px">Nothing logged in this program yet.</div>`;
   groups.forEach(g => {
     h += `<h2><span style="font:700 22px var(--cond);color:var(--ink)">${esc(g.day)}</span></h2>`;
@@ -1860,7 +1889,8 @@ function renderBuilder(){
       <select data-pf="phsets" data-k="${k}" aria-label="Sets">${[["", "Normal sets"], ["x0.5", "Half the sets"], ["-1", "1 set less"], ["+1", "1 set more"]].map(([v, t]) => `<option value="${v}" ${p.sets === v ? "selected" : ""}>${t}</option>`).join("")}${p.sets && !["x0.5", "-1", "+1"].includes(p.sets) ? `<option value="${esc(p.sets)}" selected>sets ${esc(p.sets)}</option>` : ""}</select></div>
     </div>`).join("")}
     <button class="btn sm ghost" data-act="pbPhaseAdd" style="margin-top:4px">+ Add special week</button>
-  </div>`;
+  </div>
+  <div class="card muscard" id="pbMus">${plannedCardInner(parseProgram(draftToText(dr)))}</div>`;
   dr.days.forEach((d, di) => {
     const labels = pbLabels(d);
     h += `<div class="card pbday"><div class="row" style="gap:8px;align-items:flex-start">
@@ -1925,6 +1955,7 @@ function pbInput(t){
     case "expair": ex.pair = t.checked; render(); return;
   }
   if (ex) { const row = document.querySelector(`#view .pbrow[data-d="${d}"][data-i="${i}"]`); if (row) row.innerHTML = pbRowInner(ex, pbLabels(dr.days[d])[i]); }
+  if (ex && f === "exname") { const mc = $("#pbMus"); if (mc) mc.innerHTML = plannedCardInner(parseProgram(draftToText(dr))); }
 }
 function pbValidate(dr){
   if (!dr.name.trim()) return "Give the program a name.";
@@ -1979,6 +2010,7 @@ function renderProgram(P, isCur, archiveId){
     <button class="btn sm" data-act="editProgram" data-id="${esc(archiveId || "")}">Edit</button></div>
     ${P.phases.length ? `<div style="margin-top:10px">${P.phases.map(ph => `<div class="phase ${cw && cw.phase === ph ? "cur" : ""}"><span class="w">${ph.from === ph.to ? "Week " + ph.from : ph.to === 9999 ? "Week " + ph.from + "+" : "Weeks " + ph.from + "–" + ph.to}</span><span>${esc(ph.label)}${ph.sets ? ` <span class="faint">(sets ${ph.sets.op === "x" ? "×" : ph.sets.op}${ph.sets.v})</span>` : ""}</span></div>`).join("")}</div>` : ""}
   </div>`;
+  h += `<div class="card muscard" style="margin-top:12px">${plannedCardInner(P)}</div>`;
   P.days.forEach(d => {
     h += `<h2><span style="font:700 22px var(--cond);color:var(--ink)">${esc(d.name)}</span>${d.subtitle ? ` <span class="faint">${esc(d.subtitle)}</span>` : ""}</h2><div class="card">`;
     d.exercises.forEach(e => {
