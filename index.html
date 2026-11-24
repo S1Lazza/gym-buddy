@@ -136,7 +136,55 @@ textarea{field-sizing:content;min-height:42px}
 .cedit .chg{font-size:13px;color:var(--ink2);flex:none}
 .cline{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:8px;font-size:13px;color:var(--ink3)}
 .cline b{color:var(--ink2);font-weight:600}
-.newprog{margin:0 0 12px;border-style:dashed;background:none}
+.newprog{display:flex;align-items:center;gap:14px;width:100%;text-align:left;margin:0 0 12px}
+.newprog .plus{flex:none;width:40px;height:40px;border-radius:12px;background:var(--accent);color:#111;display:grid;place-items:center;font:700 26px/1 var(--cond)}
+.newprog > span:nth-child(2){flex:1;min-width:0}
+.newprog .t{display:block;font:700 22px/1.1 var(--cond)}
+.newprog .sub{display:block;font-size:13px;color:var(--ink3);margin-top:3px}
+.newprog .chev{color:var(--ink3);font-size:22px}
+.pb .fld{display:block;margin-bottom:10px}
+.pb .fld > span{display:block;font-size:13px;color:var(--ink3);margin-bottom:5px}
+.pb .fld > span small{font-size:12px;opacity:.8}
+.pb input:not([type=checkbox]),.pb select,.pb textarea{width:100%;height:44px;border-radius:11px;border:1px solid var(--line);background:var(--bg);padding:0 12px;font-size:16px;color:var(--ink)}
+.pb textarea{height:auto;min-height:44px;padding:10px 12px}
+.pb input:focus,.pb select:focus,.pb textarea:focus{outline:none;border-color:var(--ink2)}
+.pbgrid2{display:grid;grid-template-columns:1.4fr 1fr;gap:10px}
+.pbgrid3{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:10px}
+.pbsec{font-weight:600;font-size:15px;margin:6px 0 8px}
+.pbsec small{font-weight:400;color:var(--ink3);font-size:12.5px;margin-left:4px}
+.pbphase{border-top:1px solid var(--line);padding:10px 0 2px}
+.pbphase .r1,.pbphase .r2{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.pbphase .w{font-size:14px;color:var(--ink3)}
+.pbphase .r1 input{width:56px!important;text-align:center;padding:0 4px!important}
+.pbphase .x{margin-left:auto;width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:none;color:var(--ink3);font-size:20px;line-height:1}
+.pbphase .r2 input{flex:1;min-width:0}
+.pbphase .r2 select{flex:none;width:44%}
+.pb select{font:500 15px var(--sans)!important;appearance:auto}
+.pbday{padding:12px}
+.pbday .dayname{font:700 24px/1 var(--cond)!important;height:44px}
+.pbday .daysub{margin-top:6px;height:36px!important;font-size:14px!important}
+.pbex{border-top:1px solid var(--line)}
+.pbex:first-of-type{margin-top:10px}
+.pbex.paired + .pbex .pbrow,.pbex.paired .pbrow{background:rgba(198,244,50,.04)}
+.pbrow{display:grid;grid-template-columns:34px 1fr auto;gap:2px 8px;width:100%;text-align:left;padding:10px 2px;background:none;border:none;color:var(--ink);align-items:center}
+.pbrow .lbl{grid-row:1/3;font:700 14px/1 var(--cond);background:var(--accent);color:#111;border-radius:7px;padding:4px 0;text-align:center}
+.pbrow .lbl.plain{background:var(--surface2);color:var(--ink2)}
+.pbrow .nm{font-weight:600;font-size:16px}
+.pbrow .s{font:700 18px/1 var(--cond);font-variant-numeric:tabular-nums}
+.pbrow .sub{grid-column:2/4;font-size:12.5px;color:var(--ink3)}
+.pbed{padding:4px 2px 12px}
+.step{display:flex;align-items:center;height:44px;border:1px solid var(--line);border-radius:11px;background:var(--bg);overflow:hidden}
+.step button{width:40px;height:100%;background:none;border:none;color:var(--ink);font-size:22px}
+.step b{flex:1;text-align:center;font:700 20px/1 var(--cond)}
+.chips{display:flex;gap:6px}
+.chips button{flex:1;height:44px;border-radius:11px;border:1px solid var(--line);background:var(--bg);color:var(--ink2);font:700 17px/1 var(--cond)}
+.chips button.on{background:var(--accent);border-color:var(--accent);color:#111}
+.chips input{flex:1.2;text-align:center;padding:0 6px!important}
+.tog{display:flex;align-items:center;gap:10px;font-size:15px;margin:2px 0 10px}
+.tog input{width:22px;height:22px;accent-color:var(--accent)}
+.pbacts{gap:6px}
+.pbacts .btn[disabled]{opacity:.35}
+.pbadd{margin-top:6px}
 .notebox{position:relative}
 .notebox textarea{padding-right:56px;min-height:54px;display:block}
 .mic{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:11px;display:grid;place-items:center;color:var(--ink2);background:var(--surface);border:1px solid var(--line)}
@@ -521,6 +569,28 @@ async function saveProgram(text){
   }
   catch(e){ setSaveState("err", "Program not saved"); return false; }
 }
+// one save path for the text editor and the visual editor. mode: "new", "current" or an archived program id
+async function commitProgram(text, mode, showErr, force){
+  const P = parseProgram(text);
+  if (!P.days.length) { showErr(P.errors.map(esc).join("<br>")); return false; }
+  if (P.errors.length && !force) { showErr(P.errors.map(esc).join("<br>") + `<br><button class="btn sm" data-act="saveProgram" data-force="1" style="margin-top:6px">Save anyway</button>`); return false; }
+  if (mode === "new") {
+    const taken = P.name === S.P.name || [...S.archive.values()].some(a => a.name === P.name) || sessionsOf(P.name).length;
+    if (!P.name || P.name === "New program" || P.name === "My program" || taken) { showErr(esc(taken ? `"${P.name}" is already used. Give the new program its own name.` : `Give the new program a name.`)); return false; }
+    const oldName = S.P.name;
+    if (await saveProgram(text)) { S.programView = null; toast(P.name + " is now your current program. " + oldName + " is kept below."); return true; }
+    return false;
+  }
+  if (mode !== "current") {
+    const a = S.archive.get(mode);
+    if (a && P.name !== a.name) { showErr(esc(`Keep the name "${a.name}" so the plan stays linked to its sessions.`)); return false; }
+    if (await saveArchived(mode, text)) { toast("Plan saved"); return true; }
+    return false;
+  }
+  const oldName = S.P.name;
+  if (await saveProgram(text)) { S.programView = P.name; toast(P.name !== oldName ? "New program started. " + oldName + " is kept in Programs." : "Program saved"); return true; }
+  return false;
+}
 async function saveArchived(id, text){
   const P = parseProgram(text), a = S.archive.get(id);
   if (!S.db || !a) return false;
@@ -570,7 +640,7 @@ async function loadLastBackup(){
 }
 async function signOut(){ try { await SB.auth.signOut(); } catch(e){} location.reload(); }
 
-const APP_VERSION = "1.3.1";
+const APP_VERSION = "1.4.0";
 /* ---------- voice notes: tap the mic, speak, the words are added to the note ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const VOICE = {rec: null, f: null, i: null, base: "", lang: "en-US", active: false, maxT: null};
@@ -704,7 +774,7 @@ function startWith(user){
 function softRender(){
   const ae = document.activeElement;
   if (ae && /INPUT|TEXTAREA|SELECT/.test(ae.tagName) && ae.closest("#view")) return; // never steal focus from a field you're typing in
-  if (S.editProgram) return;
+  if (S.editProgram || S.pb) return;
   const editing = (S.tab === "today" && activeSession()) || S.editingId;
   if (editing && document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
   if (editing) return; // editor owns its state; avoid clobbering scroll
@@ -1296,9 +1366,51 @@ document.addEventListener("click", async e => {
     case "toggleCompare": S.compare = !S.compare; render(); return;
     case "compareWith": S.compareWith = b.dataset.p; render(); return;
     case "metric": S.metric = b.dataset.m; render(); return;
-    case "newProgram": S.editProgram = "new"; S.newProgText = newProgramTemplate(); render(); window.scrollTo(0,0); return;
+    case "newProgram": S.pb = {mode: "new", draft: emptyDraft(), open: null}; render(); window.scrollTo(0,0); return;
     case "newFromCurrent": { const ta = $("#progText"); if (ta) { ta.value = S.programText.replace(/^Program:.*$/m, "Program: " + S.P.name + " (copy)").replace(/^Start:.*$/m, "Start: " + addDaysISO(mondayISO(todayISO()), 7)); autosize(ta); } return; }
-    case "editProgram": S.editProgram = b.dataset.id ? b.dataset.id : "current"; render(); window.scrollTo(0,0); return;
+    case "editProgram": { const mode = b.dataset.id ? b.dataset.id : "current"; const text = mode === "current" ? (S.programText || DEFAULT_PROGRAM) : ((S.archive.get(mode) || {}).text || "");
+      S.pb = {mode, draft: draftFromText(text), open: null}; render(); window.scrollTo(0,0); return; }
+    case "pbOpen": { const key = b.dataset.d + ":" + b.dataset.i; S.pb.open = S.pb.open === key ? null : key; render(); return; }
+    case "pbSets": { const e = S.pb.draft.days[+b.dataset.d].exercises[+b.dataset.i]; e.sets = Math.max(1, Math.min(10, e.sets + +b.dataset.v)); render(); return; }
+    case "pbRest": { const e = S.pb.draft.days[+b.dataset.d].exercises[+b.dataset.i], v = +b.dataset.v; e.rest = v; render(); return; }
+    case "pbMove": { const d = S.pb.draft.days[+b.dataset.d], i = +b.dataset.i, j = i + +b.dataset.v; if (j < 0 || j >= d.exercises.length) return;
+      [d.exercises[i], d.exercises[j]] = [d.exercises[j], d.exercises[i]]; d.exercises.forEach((e, k) => { if (k === d.exercises.length - 1) e.pair = false; });
+      S.pb.open = b.dataset.d + ":" + j; render(); return; }
+    case "pbExDel": { const d = S.pb.draft.days[+b.dataset.d], i = +b.dataset.i;
+      const r = await modal({title: `Remove ${d.exercises[i].name || "this exercise"}?`, buttons: [{text: "Cancel", cls: "ghost"}, {text: "Remove", cls: "danger", value: true}]}); if (!r.value) return;
+      d.exercises.splice(i, 1); if (i > 0 && i === d.exercises.length) d.exercises[i - 1].pair = false; S.pb.open = null; render(); return; }
+    case "pbExAdd": { const d = S.pb.draft.days[+b.dataset.d];
+      const r = await modal({title: "Add exercise", input: {value: "", placeholder: "Exercise name", options: knownNames().sort()}, buttons: [{text: "Cancel", cls: "ghost"}, {text: "Add", cls: "primary", value: true}]});
+      if (!r.value || !r.text) return;
+      const fromProg = progEx(r.text);
+      d.exercises.push({name: r.text, sets: fromProg ? fromProg.sets : 3, reps: fromProg ? dash(fromProg.reps) : "8-12", rir: fromProg ? dash(fromProg.rir) : "1-2", rest: fromProg && fromProg.rest ? fromProg.rest : 120, start: "", tip: "", muscles: fromProg && fromProg.muscles ? musclesTxt(fromProg.muscles) : "", pair: false});
+      S.pb.open = b.dataset.d + ":" + (d.exercises.length - 1); render(); return; }
+    case "pbDayAdd": { const n = S.pb.draft.days.length; S.pb.draft.days.push({name: "Day " + String.fromCharCode(65 + n), sub: "", exercises: []}); render();
+      const inp = document.querySelector(`#view input[data-pf="dayname"][data-d="${n}"]`); if (inp) { inp.scrollIntoView({block: "center"}); inp.focus(); inp.select(); } return; }
+    case "pbDayMenu": { const days = S.pb.draft.days, di = +b.dataset.d;
+      const btns = [{text: "Cancel", cls: "ghost"}];
+      if (di < days.length - 1) btns.push({text: "Move day down", value: "down"});
+      if (di > 0) btns.push({text: "Move day up", value: "up"});
+      btns.push({text: "Duplicate day", value: "dup"});
+      if (days.length > 1) btns.push({text: "Delete day", cls: "danger", value: "del"});
+      const r = await modal({title: days[di].name || "Day", buttons: btns}); if (!r.value) return;
+      if (r.value === "up") [days[di - 1], days[di]] = [days[di], days[di - 1]];
+      if (r.value === "down") [days[di + 1], days[di]] = [days[di], days[di + 1]];
+      if (r.value === "dup") days.splice(di + 1, 0, Object.assign(clone(days[di]), {name: days[di].name + " (copy)"}));
+      if (r.value === "del") { const c = await modal({title: `Delete ${days[di].name}?`, body: `<p class="muted small">Its ${days[di].exercises.length} exercises are removed from the plan. Logged sessions are not affected.</p>`, buttons: [{text: "Cancel", cls: "ghost"}, {text: "Delete day", cls: "danger", value: true}]}); if (!c.value) return; days.splice(di, 1); }
+      S.pb.open = null; render(); return; }
+    case "pbPhaseAdd": S.pb.draft.phases.push({from: "", to: "", label: "Deload", sets: "x0.5"}); render(); return;
+    case "pbPhaseDel": S.pb.draft.phases.splice(+b.dataset.k, 1); render(); return;
+    case "pbCopyCurrent": { const dr = draftFromText(S.programText || DEFAULT_PROGRAM); dr.name = S.P.name + " (copy)"; dr.start = addDaysISO(mondayISO(todayISO()), 7); S.pb.draft = dr; S.pb.open = null; render(); toast("Copied. Rename it and change what you need."); return; }
+    case "pbCancel": S.pb = null; render(); window.scrollTo(0,0); return;
+    case "pbAsText": S.editProgram = S.pb.mode; S.textDraft = draftToText(S.pb.draft); S.pb = null; render(); window.scrollTo(0,0); return;
+    case "pbVisual": { const ta = $("#progText"), P = parseProgram(ta.value); if (!P.days.length) { $("#progErr").innerHTML = P.errors.map(esc).join("<br>"); return; }
+      S.pb = {mode: S.editProgram, draft: draftFromText(ta.value), open: null}; S.editProgram = false; S.textDraft = null; render(); window.scrollTo(0,0); return; }
+    case "pbSave": {
+      const err = pbValidate(S.pb.draft); if (err) { $("#pbErr").textContent = err; $("#pbErr").scrollIntoView({block: "center"}); return; }
+      const ok = await commitProgram(draftToText(S.pb.draft), S.pb.mode, html => { $("#pbErr").innerHTML = html; $("#pbErr").scrollIntoView({block: "center"}); }, true);
+      if (ok) { S.pb = null; render(); window.scrollTo(0,0); }
+      return; }
     case "progOpen": S.programView = b.dataset.p; render(); window.scrollTo(0,0); return;
     case "progMakeCurrent": {
       const a = [...S.archive.values()].find(x => x.name === b.dataset.p); if (!a) return;
@@ -1327,26 +1439,10 @@ document.addEventListener("click", async e => {
       return;
     }
     case "progBack": S.programView = null; render(); window.scrollTo(0,0); return;
-    case "cancelProgram": S.editProgram = false; render(); return;
+    case "cancelProgram": S.editProgram = false; S.textDraft = null; render(); return;
     case "saveProgram": {
-      const text = $("#progText").value, P = parseProgram(text);
-      if (!P.days.length) { $("#progErr").innerHTML = P.errors.map(esc).join("<br>"); return; }
-      if (P.errors.length && !b.dataset.force) { $("#progErr").innerHTML = P.errors.map(esc).join("<br>") + `<br><button class="btn sm" data-act="saveProgram" data-force="1" style="margin-top:6px">Save anyway</button>`; return; }
-      if (S.editProgram === "new") {
-        const taken = P.name === S.P.name || [...S.archive.values()].some(a => a.name === P.name) || sessionsOf(P.name).length;
-        if (!P.name || P.name === "New program" || taken) { $("#progErr").textContent = taken ? `"${P.name}" is already used. Give the new program its own name on the first line.` : `Give the new program a name on the first line, e.g. "Program: Push/Pull/Legs January".`; return; }
-        const oldName = S.P.name;
-        if (await saveProgram(text)) { S.editProgram = false; S.newProgText = null; S.programView = null; render(); window.scrollTo(0,0); toast(P.name + " is now your current program. " + oldName + " is kept below."); }
-        return;
-      }
-      if (S.editProgram !== "current") {
-        const a = S.archive.get(S.editProgram);
-        if (a && P.name !== a.name) { $("#progErr").textContent = `Keep the first line as "Program: ${a.name}" so the plan stays linked to its sessions.`; return; }
-        if (await saveArchived(S.editProgram, text)) { S.editProgram = false; render(); toast("Plan saved"); }
-        return;
-      }
-      const oldName = S.P.name;
-      if (await saveProgram(text)) { S.editProgram = false; S.programView = P.name; render(); toast(P.name !== oldName ? "New program started. " + oldName + " is kept in Programs." : "Program saved"); }
+      const ok = await commitProgram($("#progText").value, S.editProgram, html => $("#progErr").innerHTML = html, !!b.dataset.force);
+      if (ok) { S.editProgram = false; S.textDraft = null; S.pb = null; render(); window.scrollTo(0,0); }
       return;
     }
     case "musPrev": S.musIdx--; rerenderEditor(); return;
@@ -1368,6 +1464,7 @@ document.addEventListener("click", async e => {
   }
 });
 document.addEventListener("input", e => {
+  if (S.pb && e.target.dataset.pf) { pbInput(e.target); return; }
   const t = e.target, f = t.dataset.f; if (!f) return;
   if (t.tagName === "TEXTAREA") autosize(t);
   if (f === "progsel") { S.progressEx = t.value; render(); return; }
@@ -1650,7 +1747,163 @@ window.addEventListener("resize", () => { if (S.tab === "progress") drawChart();
 /* ---------- program ---------- */
 function sessionsOf(name){ return sortedSessions().filter(x => x.program === name); }
 function rangeOf(list){ if (!list.length) return ""; const a = list[list.length-1].date, b = list[0].date; return a === b ? fmtDate(a) : `${fmtDate(a)} to ${fmtDate(b)}`; }
+/* ---------- visual program editor: edit a program the way you edit a workout ---------- */
+// the program is still stored as text; the editor works on a draft and writes the same text format back
+const PB_REST = [60, 90, 120, 180];
+const restTxt = sec => sec ? Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0") : "";
+const dash = t => String(t || "").replace(/[–—]/g, "-");
+const musclesTxt = m => Object.entries(m || {}).map(([k, v]) => k.toLowerCase() + (v !== 1 ? " " + v : "")).join(", ");
+function draftFromText(text){
+  const P = parseProgram(text);
+  return {
+    name: P.name === "My program" && !/^program\s*:/im.test(text) ? "" : P.name,
+    start: P.start || "", length: P.length || "", notes: P.notes || "",
+    phases: P.phases.map(ph => ({from: ph.from, to: ph.to === 9999 ? "+" : ph.to, label: ph.label, sets: ph.sets ? ph.sets.op + ph.sets.v : ""})),
+    days: P.days.map(d => ({name: d.name, sub: d.subtitle || "", exercises: d.exercises.map((e, i, arr) => ({
+      name: e.name, sets: e.sets || 3, reps: dash(e.reps), rir: dash(e.rir), rest: e.rest || null, start: e.start || "", tip: e.tip || "",
+      muscles: e.muscles ? musclesTxt(e.muscles) : "", pair: !!(e.group && arr[i + 1] && arr[i + 1].group === e.group)}))})),
+  };
+}
+function pbLabels(day){
+  const out = []; let n = 0, letter = 0;
+  day.exercises.forEach((e, i) => {
+    const prevPair = i > 0 && day.exercises[i - 1].pair;
+    if (!prevPair) { n++; letter = 0; }
+    const grouped = e.pair || prevPair;
+    out.push(grouped ? n + String.fromCharCode(65 + letter++) : String(n));
+  });
+  return out;
+}
+function draftToText(dr){
+  const L = [];
+  L.push("Program: " + (dr.name || "").trim());
+  if (dr.start) L.push("Start: " + dr.start);
+  if (+dr.length) L.push("Length: " + +dr.length + " weeks");
+  dr.phases.filter(p => p.from && p.label).forEach(p => {
+    const to = p.to === "+" ? "+" : (+p.to && +p.to !== +p.from ? "-" + +p.to : "");
+    L.push(`Week ${+p.from}${to}: ${p.label.trim()}${p.sets ? " | sets " + p.sets : ""}`);
+  });
+  dr.days.forEach(d => {
+    L.push("", "## " + (d.name || "Day").trim() + (d.sub && d.sub.trim() ? " — " + d.sub.trim() : ""));
+    const labels = pbLabels(d);
+    d.exercises.forEach((e, i) => {
+      const f = [e.name.trim(), `${e.sets}x${dash(e.reps).trim() || "8-12"}`];
+      if (e.rir && e.rir.trim()) f.push("RIR " + dash(e.rir).trim());
+      if (e.rest) f.push("rest " + restTxt(e.rest));
+      if (e.start && e.start.trim()) f.push("start: " + e.start.trim());
+      if (e.muscles && e.muscles.trim()) f.push("muscles: " + e.muscles.trim());
+      L.push(`${labels[i]}. ${f.join(" | ")}`);
+      (e.tip || "").split("\n").map(t => t.trim()).filter(Boolean).forEach(t => L.push("> " + t));
+    });
+  });
+  if (dr.notes && dr.notes.trim()) L.push("", "# Notes", dr.notes.trim());
+  return L.join("\n") + "\n";
+}
+function emptyDraft(){
+  return {name: "", start: addDaysISO(mondayISO(todayISO()), 7), length: 8, notes: "", phases: [], days: [{name: "Day A", sub: "", exercises: []}]};
+}
+function pbRowInner(e, label){
+  const bits = [e.rir ? "RIR " + esc(e.rir) : "", e.rest ? "rest " + restTxt(e.rest) : "", e.start ? "start " + esc(e.start) : ""].filter(Boolean).join(", ");
+  return `<span class="lbl ${/[A-Z]$/.test(label) ? "" : "plain"}">${label}</span><span class="nm">${esc(e.name) || `<i class="faint">Name this exercise</i>`}</span>
+    <span class="s">${e.sets} × ${esc(dash(e.reps) || "8-12")}</span><span class="sub">${bits}</span>`;
+}
+function renderBuilder(){
+  const pb = S.pb, dr = pb.draft, isNew = pb.mode === "new", archived = !isNew && pb.mode !== "current";
+  let h = `<div class="pb"><div class="title2" style="margin-bottom:4px">${isNew ? "New program" : "Edit program"}</div>`;
+  if (isNew) h += `<p class="muted small" style="margin:0 0 10px">When you create it, it becomes your current program and ${esc(S.P.name)} moves down the list with its sessions.</p>
+    <button class="btn sm ghost" data-act="pbCopyCurrent" style="margin:0 0 12px">Start from a copy of ${esc(S.P.name)}</button>`;
+  h += `<div class="card pbhead">
+    <label class="fld"><span>Name</span><input data-pf="pname" value="${esc(dr.name)}" placeholder="e.g. Push/Pull/Legs January" ${archived ? "readonly" : ""}></label>
+    ${archived ? `<div class="faint small" style="margin:-4px 0 8px">The name stays fixed so the plan stays linked to its sessions.</div>` : ""}
+    <div class="pbgrid2"><label class="fld"><span>Start</span><input type="date" data-pf="pstart" value="${esc(dr.start)}"></label>
+    <label class="fld"><span>Weeks</span><input data-pf="plength" inputmode="numeric" value="${esc(dr.length)}" placeholder="e.g. 12"></label></div>
+    <div class="pbsec">Special weeks <small>deloads, blocks</small></div>
+    ${dr.phases.map((p, k) => `<div class="pbphase">
+      <div class="r1"><span class="w">Weeks</span><input data-pf="phfrom" data-k="${k}" inputmode="numeric" value="${esc(p.from)}" aria-label="From week">
+      <span class="w">to</span><input data-pf="phto" data-k="${k}" value="${esc(p.to === "+" ? "+" : p.to)}" placeholder="–" aria-label="To week (+ for onwards)">
+      <button class="x" data-act="pbPhaseDel" data-k="${k}" aria-label="Remove">×</button></div>
+      <div class="r2"><input data-pf="phlabel" data-k="${k}" value="${esc(p.label)}" placeholder="Deload" aria-label="Name">
+      <select data-pf="phsets" data-k="${k}" aria-label="Sets">${[["", "Normal sets"], ["x0.5", "Half the sets"], ["-1", "1 set less"], ["+1", "1 set more"]].map(([v, t]) => `<option value="${v}" ${p.sets === v ? "selected" : ""}>${t}</option>`).join("")}${p.sets && !["x0.5", "-1", "+1"].includes(p.sets) ? `<option value="${esc(p.sets)}" selected>sets ${esc(p.sets)}</option>` : ""}</select></div>
+    </div>`).join("")}
+    <button class="btn sm ghost" data-act="pbPhaseAdd" style="margin-top:4px">+ Add special week</button>
+  </div>`;
+  dr.days.forEach((d, di) => {
+    const labels = pbLabels(d);
+    h += `<div class="card pbday"><div class="row" style="gap:8px;align-items:flex-start">
+      <div style="flex:1;min-width:0"><input class="dayname" data-pf="dayname" data-d="${di}" value="${esc(d.name)}" placeholder="Day name">
+      <input class="daysub" data-pf="daysub" data-d="${di}" value="${esc(d.sub)}" placeholder="Focus (optional)"></div>
+      <button class="btn sm ghost" data-act="pbDayMenu" data-d="${di}" aria-label="Day options">⋯</button></div>`;
+    d.exercises.forEach((e, i) => {
+      const open = pb.open === di + ":" + i;
+      h += `<div class="pbex ${open ? "open" : ""} ${e.pair ? "paired" : ""}"><button class="pbrow" data-act="pbOpen" data-d="${di}" data-i="${i}">${pbRowInner(e, labels[i])}</button>`;
+      if (open) h += `<div class="pbed">
+        <label class="fld"><span>Exercise</span><input data-pf="exname" data-d="${di}" data-i="${i}" value="${esc(e.name)}" list="pbNames" placeholder="Exercise name"></label>
+        <div class="pbgrid3">
+          <div class="fld"><span>Sets</span><div class="step"><button data-act="pbSets" data-d="${di}" data-i="${i}" data-v="-1" aria-label="One set less">−</button><b>${e.sets}</b><button data-act="pbSets" data-d="${di}" data-i="${i}" data-v="1" aria-label="One set more">+</button></div></div>
+          <label class="fld"><span>Reps</span><input data-pf="exreps" data-d="${di}" data-i="${i}" value="${esc(e.reps)}" placeholder="8-12"></label>
+          <label class="fld"><span>RIR</span><input data-pf="exrir" data-d="${di}" data-i="${i}" value="${esc(e.rir)}" placeholder="1-2"></label>
+        </div>
+        <div class="fld"><span>Rest</span><div class="chips">${PB_REST.map(r => `<button class="${e.rest === r ? "on" : ""}" data-act="pbRest" data-d="${di}" data-i="${i}" data-v="${r}">${restTxt(r)}</button>`).join("")}
+          <input data-pf="exrest" data-d="${di}" data-i="${i}" value="${e.rest && !PB_REST.includes(e.rest) ? restTxt(e.rest) : ""}" placeholder="other" inputmode="numeric"></div></div>
+        <label class="fld"><span>Start weight <small>optional</small></span><input data-pf="exstart" data-d="${di}" data-i="${i}" value="${esc(e.start)}" placeholder="e.g. 20 kg, BW, Find it"></label>
+        <label class="fld"><span>Tip <small>optional</small></span><textarea data-pf="extip" data-d="${di}" data-i="${i}" placeholder="A cue, or how to set it up">${esc(e.tip)}</textarea></label>
+        ${i < d.exercises.length - 1 ? `<label class="tog"><input type="checkbox" data-pf="expair" data-d="${di}" data-i="${i}" ${e.pair ? "checked" : ""}> Superset with the next exercise</label>` : ""}
+        <div class="row pbacts">
+          <button class="btn sm ghost" data-act="pbMove" data-d="${di}" data-i="${i}" data-v="-1" ${i === 0 ? "disabled" : ""} aria-label="Move up">↑</button>
+          <button class="btn sm ghost" data-act="pbMove" data-d="${di}" data-i="${i}" data-v="1" ${i === d.exercises.length - 1 ? "disabled" : ""} aria-label="Move down">↓</button>
+          <button class="btn sm danger ghost" data-act="pbExDel" data-d="${di}" data-i="${i}">Delete</button>
+          <button class="btn sm" data-act="pbOpen" data-d="${di}" data-i="${i}" style="margin-left:auto">Done</button></div>
+      </div>`;
+      h += `</div>`;
+    });
+    h += `<button class="btn block ghost pbadd" data-act="pbExAdd" data-d="${di}">+ Add exercise</button></div>`;
+  });
+  h += `<button class="btn block ghost pbadd" data-act="pbDayAdd" style="margin-top:4px">+ Add day</button>
+    <h2>Notes</h2><textarea data-pf="pnotes" placeholder="Progression rules, anything to remember">${esc(dr.notes)}</textarea>
+    <div id="pbErr" class="err"></div>
+    <div class="row endrow"><button class="btn ghost" data-act="pbCancel">Cancel</button><button class="btn primary" data-act="pbSave">${isNew ? "Create program" : "Save"}</button></div>
+    <button class="btn block ghost bare" data-act="pbAsText">Edit as text</button>
+    <datalist id="pbNames">${knownNames().sort().map(n => `<option value="${esc(n)}">`).join("")}</datalist></div>`;
+  return h;
+}
+function pbInput(t){
+  const dr = S.pb.draft, f = t.dataset.pf, d = +t.dataset.d, i = +t.dataset.i, k = +t.dataset.k, v = t.value;
+  const ex = !isNaN(d) && !isNaN(i) && dr.days[d] ? dr.days[d].exercises[i] : null;
+  if (t.tagName === "TEXTAREA") autosize(t);
+  switch (f) {
+    case "pname": dr.name = v; break;
+    case "pstart": dr.start = v; break;
+    case "plength": dr.length = v.replace(/\D/g, ""); break;
+    case "pnotes": dr.notes = v; break;
+    case "phfrom": dr.phases[k].from = v.replace(/\D/g, ""); break;
+    case "phto": dr.phases[k].to = v.trim() === "+" ? "+" : v.replace(/\D/g, ""); break;
+    case "phlabel": dr.phases[k].label = v; break;
+    case "phsets": dr.phases[k].sets = v; break;
+    case "dayname": dr.days[d].name = v; break;
+    case "daysub": dr.days[d].sub = v; break;
+    case "exname": ex.name = v; break;
+    case "exreps": ex.reps = v; break;
+    case "exrir": ex.rir = v; break;
+    case "exstart": ex.start = v; break;
+    case "extip": ex.tip = v; break;
+    case "exrest": { const r = v.trim() ? parseRest(v.includes(":") || /m/.test(v) ? v : v + "s") : null; ex.rest = r || null;
+      t.parentElement.querySelectorAll("button").forEach(b => b.classList.toggle("on", +b.dataset.v === ex.rest)); break; }
+    case "expair": ex.pair = t.checked; render(); return;
+  }
+  if (ex) { const row = document.querySelector(`#view .pbrow[data-d="${d}"][data-i="${i}"]`); if (row) row.innerHTML = pbRowInner(ex, pbLabels(dr.days[d])[i]); }
+}
+function pbValidate(dr){
+  if (!dr.name.trim()) return "Give the program a name.";
+  if (!dr.days.length) return "Add at least one day.";
+  for (const d of dr.days) {
+    if (!d.name.trim()) return "Every day needs a name.";
+    if (!d.exercises.length) return `${d.name} has no exercises yet.`;
+    if (d.exercises.some(e => !e.name.trim())) return `Name every exercise in ${d.name}.`;
+  }
+  return null;
+}
 function renderProgramTab(){
+  if (S.pb) return renderBuilder();
   if (S.editProgram) return renderProgramEdit();
   if (S.programView == null) return renderProgramList2();
   if (S.programView === S.P.name) return backBtn() + renderProgram(S.P, true);
@@ -1667,7 +1920,7 @@ function renderProgramList2(){
   sortedSessions().forEach(x => { if (x.program && x.program !== S.P.name) { const t = parseISO(x.date).getTime(); others.set(x.program, Math.max(others.get(x.program) || 0, t)); } });
   [...others.entries()].sort((a, b) => b[1] - a[1]).forEach(([n]) => names.push(n));
   const cw = currentWeek(S.P);
-  return `<button class="btn block newprog" data-act="newProgram">+ New program</button>` + names.map((n, i) => {
+  return `<button class="card newprog" data-act="newProgram"><span class="plus" aria-hidden="true">+</span><span><span class="t">New program</span><span class="sub">From scratch or a copy of the current one</span></span><span class="chev">›</span></button>` + names.map((n, i) => {
     const cur = i === 0, list = sessionsOf(n), hasPlan = cur || [...S.archive.values()].some(a => a.name === n);
     const sub = cur ? (cw && cw.week ? `Week ${cw.week}, started ${fmtDate(S.P.start)}` : S.P.start ? `Starts ${fmtDate(S.P.start, true)}` : "")
       : [list.length ? `${list.length} sessions, ${rangeOf(list)}` : "", hasPlan ? "" : "no plan saved"].filter(Boolean).join(", ");
@@ -1746,13 +1999,13 @@ function renderProgramEdit(){
   if (S.editProgram === "new") return `<div class="title2" style="margin-bottom:6px">New program</div>
     <p class="muted small" style="margin-top:0">Write it below or paste one in. When you save, it becomes your current program, and ${esc(S.P.name)} moves down the list with all its sessions.</p>
     <button class="btn sm ghost" data-act="newFromCurrent" style="margin:0 0 10px">Start from a copy of ${esc(S.P.name)}</button>
-    <textarea class="code" id="progText" spellcheck="false">${esc(S.newProgText || newProgramTemplate())}</textarea>
+    <textarea class="code" id="progText" spellcheck="false">${esc(S.textDraft || S.newProgText || newProgramTemplate())}</textarea>
     <div id="progErr" class="err"></div>
-    <div class="row" style="gap:8px;margin-top:6px"><button class="btn ghost" data-act="cancelProgram">Cancel</button><button class="btn primary" style="flex:1" data-act="saveProgram">Create program</button></div>` + formatGuide();
+    <div class="row" style="gap:8px;margin-top:6px"><button class="btn ghost" data-act="cancelProgram">Cancel</button><button class="btn primary" style="flex:1" data-act="saveProgram">Create program</button></div><button class="btn block ghost bare" data-act="pbVisual">Edit visually</button>` + formatGuide();
   return `<p class="muted small" style="margin-top:0">${S.editProgram === "current" ? "Edit the plan as text. To start a different program, use New program on the Programs list instead." : "Edit this past program's plan. Keep the name on the first line as it is, so it stays linked to its sessions."}</p>
-    <textarea class="code" id="progText" spellcheck="false">${esc(S.editProgram === "current" ? (S.programText || DEFAULT_PROGRAM) : ((S.archive.get(S.editProgram) || {}).text || ""))}</textarea>
+    <textarea class="code" id="progText" spellcheck="false">${esc(S.textDraft || (S.editProgram === "current" ? (S.programText || DEFAULT_PROGRAM) : ((S.archive.get(S.editProgram) || {}).text || "")))}</textarea>
     <div id="progErr" class="err"></div>
-    <div class="row" style="gap:8px;margin-top:6px"><button class="btn ghost" data-act="cancelProgram">Cancel</button><button class="btn primary" style="flex:1" data-act="saveProgram">Save program</button></div>
+    <div class="row" style="gap:8px;margin-top:6px"><button class="btn ghost" data-act="cancelProgram">Cancel</button><button class="btn primary" style="flex:1" data-act="saveProgram">Save program</button></div><button class="btn block ghost bare" data-act="pbVisual">Edit visually</button>
     ${formatGuide()}`;
 }
 
