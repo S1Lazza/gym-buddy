@@ -187,6 +187,8 @@ nav.tabs svg{width:22px;height:22px}
 #modal h3{margin:0 0 10px;font:700 22px/1.1 var(--cond)}
 #modal input[type=text]{width:100%;height:48px;border-radius:11px;border:1px solid var(--line);background:var(--bg);padding:0 12px;font-size:16px}
 #modal .acts{display:flex;gap:8px;margin-top:14px;justify-content:flex-end}
+#modal .acts.stack{flex-direction:column-reverse}
+#modal .acts.stack .btn{width:100%}
 /* history */
 .hitem{display:block;width:100%;text-align:left}
 .hitem .d{font:700 22px/1 var(--cond)}
@@ -568,7 +570,7 @@ async function loadLastBackup(){
 }
 async function signOut(){ try { await SB.auth.signOut(); } catch(e){} location.reload(); }
 
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.3.1";
 /* ---------- voice notes: tap the mic, speak, the words are added to the note ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const VOICE = {rec: null, f: null, i: null, base: "", lang: "en-US", active: false, maxT: null};
@@ -1180,7 +1182,7 @@ function modal({title, body = "", input = null, buttons}){
   return new Promise(res => {
     const sh = $("#modalSheet");
     sh.innerHTML = `<h3>${esc(title)}</h3>${body}${input ? `<input type="text" id="mInput" value="${esc(input.value || "")}" list="mList" autocomplete="off"><datalist id="mList">${(input.options||[]).map(o => `<option value="${esc(o)}">`).join("")}</datalist>` : ""}
-      <div class="acts">${buttons.map((b, k) => `<button class="btn ${b.cls || ""}" data-k="${k}">${esc(b.text)}</button>`).join("")}</div>`;
+      <div class="acts ${buttons.length > 2 ? "stack" : ""}">${buttons.map((b, k) => `<button class="btn ${b.cls || ""}" data-k="${k}">${esc(b.text)}</button>`).join("")}</div>`;
     $("#modal").style.display = "flex";
     const mi = $("#mInput"); if (mi) setTimeout(() => mi.focus(), 50);
     sh.querySelectorAll("[data-k]").forEach(b => b.onclick = () => { $("#modal").style.display = "none"; const k = +b.dataset.k; res({value: buttons[k].value, text: mi ? mi.value.trim() : null}); });
@@ -1298,6 +1300,32 @@ document.addEventListener("click", async e => {
     case "newFromCurrent": { const ta = $("#progText"); if (ta) { ta.value = S.programText.replace(/^Program:.*$/m, "Program: " + S.P.name + " (copy)").replace(/^Start:.*$/m, "Start: " + addDaysISO(mondayISO(todayISO()), 7)); autosize(ta); } return; }
     case "editProgram": S.editProgram = b.dataset.id ? b.dataset.id : "current"; render(); window.scrollTo(0,0); return;
     case "progOpen": S.programView = b.dataset.p; render(); window.scrollTo(0,0); return;
+    case "progMakeCurrent": {
+      const a = [...S.archive.values()].find(x => x.name === b.dataset.p); if (!a) return;
+      if (activeSession()) { toast("Finish or delete the workout in progress first."); return; }
+      const r = await modal({title: `Make ${a.name} current?`, body: `<p class="muted small">The Workout tab will use its days. ${esc(S.P.name)} moves to the list with its plan and sessions. Nothing is deleted.</p>`, buttons: [{text: "Cancel", cls: "ghost"}, {text: "Make current", cls: "primary", value: true}]});
+      if (!r.value) return;
+      if (await makeCurrentProgram(a)) { S.programView = null; render(); window.scrollTo(0,0); toast(a.name + " is now your current program."); }
+      return;
+    }
+    case "progDelete": {
+      const n = b.dataset.p, isCur = n === S.P.name, a = [...S.archive.values()].find(x => x.name === n), hasPlan = isCur || !!a;
+      const list = sessionsOf(n), k = list.length, ses = k + " session" + (k === 1 ? "" : "s");
+      const next = isCur ? [...S.archive.values()].sort((x, y) => (y.at || 0) - (x.at || 0))[0] : null;
+      if (isCur && !next) { await modal({title: "This is your only program", body: `<p class="muted small">Create a new program first, then you can delete this one.</p>`, buttons: [{text: "OK", cls: "primary"}]}); return; }
+      const body = `<p class="muted small">${hasPlan ? `Deletes the plan of ${esc(n)}.` : ""}${k ? ` It has ${ses} logged.` : ""}${isCur ? ` ${esc(next.name)} becomes your current program again.` : ""} This can't be undone.</p>`;
+      const buttons = [{text: "Cancel", cls: "ghost"}];
+      if (hasPlan && k) buttons.push({text: "Delete plan, keep sessions", cls: "", value: "plan"});
+      buttons.push({text: k ? (hasPlan ? `Delete plan and ${ses}` : `Delete ${ses}`) : "Delete", cls: "danger", value: "all"});
+      const r = await modal({title: `Delete ${n}?`, body, buttons});
+      if (!r.value) return;
+      if (isCur && activeSession() && (r.value === "plan" || !list.includes(activeSession()))) { toast("Finish or delete the workout in progress first."); return; }
+      if (r.value === "all") for (const x of list) await deleteSession(x.id);
+      if (isCur) await makeCurrentProgram(next).then(ok => ok && S.db.doc("programs/" + slugOf(n)).delete());
+      else if (a) { try { await S.db.doc("programs/" + a.id).delete(); } catch(e){ setSaveState("err", "Delete failed"); } }
+      S.programView = null; render(); window.scrollTo(0,0); toast(n + " deleted.");
+      return;
+    }
     case "progBack": S.programView = null; render(); window.scrollTo(0,0); return;
     case "cancelProgram": S.editProgram = false; render(); return;
     case "saveProgram": {
@@ -1629,7 +1657,7 @@ function renderProgramTab(){
   const a = [...S.archive.values()].find(x => x.name === S.programView);
   if (a) return backBtn() + renderProgram(parseProgram(a.text), false, a.id);
   const list = sessionsOf(S.programView);
-  return backBtn() + `<div class="title2">${esc(S.programView)}</div><div class="card empty" style="margin-top:14px">No plan saved for this program, only its ${list.length} logged sessions.</div>`;
+  return backBtn() + `<div class="title2">${esc(S.programView)}</div><div class="card empty" style="margin-top:14px">No plan saved for this program, only its ${list.length} logged sessions.</div>` + progActions(S.programView, false, false);
 }
 const backBtn = () => `<button class="btn sm ghost" data-act="progBack" style="margin:-4px 0 10px -10px">‹ All programs</button>`;
 function renderProgramList2(){
@@ -1673,7 +1701,25 @@ function renderProgram(P, isCur, archiveId){
     h += `</div>`;
   });
   if (P.notes) h += `<h2>Notes</h2><div class="card"><pre class="notes">${esc(P.notes)}</pre></div>`;
+  h += progActions(P.name, isCur, true);
   return h;
+}
+function progActions(name, isCur, hasPlan){
+  return `<div class="row endrow">
+    <button class="btn danger ghost" data-act="progDelete" data-p="${esc(name)}">Delete</button>
+    ${!isCur && hasPlan ? `<button class="btn primary" data-act="progMakeCurrent" data-p="${esc(name)}">Make current</button>` : ""}</div>`;
+}
+/* make an archived plan the current one; the current plan moves to the archive. Nothing is deleted. */
+async function makeCurrentProgram(a){
+  const oldText = S.programText, oldName = S.P.name;
+  setSaveState("busy", "Saving…");
+  try {
+    if (oldText && oldName) await S.db.doc("programs/" + slugOf(oldName)).set({name: oldName, text: oldText, archivedAt: Date.now()});
+    S.programText = a.text; S.P = parseProgram(a.text);
+    await S.db.doc("program/current").set({text: a.text, updatedAt: Date.now()});
+    await S.db.doc("programs/" + a.id).delete();
+    return true;
+  } catch(e){ setSaveState("err", "Program not saved"); return false; }
 }
 function formatGuide(){ return `<details><summary>Format guide</summary><div class="card small muted" style="line-height:1.6">
       <b>Program: Name</b> · <b>Start: 2026-11-09</b> · <b>Length: 16 weeks</b><br>
