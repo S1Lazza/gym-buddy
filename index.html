@@ -117,15 +117,17 @@ textarea{field-sizing:content;min-height:42px}
 .endrow{margin-top:18px;gap:10px;align-items:stretch}
 .endrow .btn{min-height:54px;font-size:18px}
 .endrow .btn.primary{flex:1}
-.cscreen .whead{position:static;background:none}
-.cq{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;margin-top:12px}
-.cq .qh{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:12px}
-.cq h3{font:700 24px/1 var(--cond);margin:0}
-.cq .qh span{font-size:14px;color:var(--ink3)}
+.cscreen .whead{position:static;background:none;padding-bottom:4px}
+.cscreen .whead .t{font-size:30px}
+.cscreen .endrow{margin-top:12px}
+.cq{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 13px 9px;margin-top:8px}
+.cq .qh{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
+.cq h3{font:700 21px/1 var(--cond);margin:0}
+.cq .qh span{font-size:13px;color:var(--ink3)}
 .cq .cbtns{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
-.cq .cbtns button{height:54px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink2);font:700 24px/1 var(--cond);font-variant-numeric:tabular-nums}
+.cq .cbtns button{height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink2);font:700 21px/1 var(--cond);font-variant-numeric:tabular-nums}
 .cq .cbtns button.on{background:var(--accent);border-color:var(--accent);color:#111}
-.cq .ends{display:flex;justify-content:space-between;margin-top:8px;font-size:13px;color:var(--ink3)}
+.cq .ends{display:flex;justify-content:space-between;margin-top:5px;font-size:12.5px;color:var(--ink3)}
 .btn.bare{border:none;background:none;color:var(--ink3);margin-top:4px}
 .cedit{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;background:none;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:0 0 12px}
 .cedit .cline{margin-top:0}
@@ -563,7 +565,7 @@ async function loadLastBackup(){
 }
 async function signOut(){ try { await SB.auth.signOut(); } catch(e){} location.reload(); }
 
-const APP_VERSION = "1.2.1";
+const APP_VERSION = "1.2.2";
 /* ---------- voice notes: tap the mic, speak, the words are added to the note ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const VOICE = {rec: null, f: null, i: null, base: "", lang: "en-US", active: false, maxT: null};
@@ -862,14 +864,13 @@ const CHECKS = [
 function renderCheckinScreen(){
   const c = S.checkin, r = c.ready, starting = c.mode === "start";
   const sub = starting ? `${esc(c.day)}, ${fmtDate(c.date, true)}` : "Edit this session's ratings";
-  return `<div class="cscreen"><div class="whead"><div class="t">How you came in</div><div class="sub">${sub}. Optional.</div></div>` +
+  return `<div class="cscreen"><div class="whead"><div class="row between"><div class="t">How you came in</div>${starting ? `<button class="btn sm" data-act="checkinBack">Back</button>` : ""}</div><div class="sub">${sub}. Optional.</div></div>` +
     CHECKS.map(q => `<section class="cq"><div class="qh"><h3>${q.name}</h3><span>${q.when}</span></div>
       <div class="cbtns" role="group" aria-label="${q.name}">${[1,2,3,4,5].map(v => `<button class="${r[q.k] === v ? "on" : ""}" data-act="rate" data-k="${q.k}" data-v="${v}" aria-pressed="${r[q.k] === v}">${v}</button>`).join("")}</div>
       <div class="ends"><span>1&nbsp;${q.lo}</span><span>5&nbsp;${q.hi}</span></div></section>`).join("") +
     `<div class="row endrow">
       <button class="btn ghost" data-act="checkinSkip">${starting ? "Skip" : "Cancel"}</button>
-      <button class="btn primary" data-act="checkinGo">${starting ? "Start workout" : "Save"}</button></div>
-    ${starting ? `<button class="btn block ghost bare" data-act="checkinBack">Back</button>` : ""}</div>`;
+      <button class="btn primary" data-act="checkinGo">${starting ? "Start workout" : "Save"}</button></div></div>`;
 }
 const checkinLine = s => { const r = s.ready || {}; const parts = CHECKS.filter(c => r[c.k] != null); return parts.length ? `<div class="cline">${parts.map(c => `<span>${c.name} <b>${r[c.k]}</b></span>`).join("")}</div>` : ""; };
 function renderEditor(s){
