@@ -188,6 +188,11 @@ textarea{field-sizing:content;min-height:42px}
 .pbadd{margin-top:6px}
 .notebox{position:relative}
 .notebox textarea{padding-right:56px;min-height:54px;display:block}
+.notebox.has textarea{padding-right:96px}
+.notebox.nomic.has textarea{padding-right:50px}
+.nclear{position:absolute;right:52px;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:10px;display:none;place-items:center;color:var(--ink3);background:none;border:1px solid var(--line)}
+.notebox.nomic .nclear{right:8px}
+.notebox.has .nclear{display:grid}
 .mic{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:11px;display:grid;place-items:center;color:var(--ink2);background:var(--surface);border:1px solid var(--line)}
 .mic svg{width:20px;height:20px}
 .mic.rec{color:#111;background:var(--accent);border-color:var(--accent);animation:micpulse 1.2s ease-in-out infinite}
@@ -641,22 +646,24 @@ async function loadLastBackup(){
 }
 async function signOut(){ try { await SB.auth.signOut(); } catch(e){} location.reload(); }
 
-const APP_VERSION = "1.4.1";
+const APP_VERSION = "1.4.3";
 /* ---------- voice notes: tap the mic, speak, the words are added to the note ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const VOICE = {rec: null, f: null, i: null, base: "", lang: "en-US", active: false, maxT: null};
 const MIC_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
 function noteBox(textarea, f, i){
-  if (!SR) return textarea;
+  const has = /<textarea[^>]*>[^<]*\S[^<]*<\/textarea>/.test(textarea);
+  const clr = `<button class="nclear" data-act="noteClear" data-f="${f}"${i != null ? ` data-i="${i}"` : ""} aria-label="Clear this note"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg></button>`;
+  if (!SR) return `<div class="notebox nomic ${has ? "has" : ""}">${textarea}${clr}</div>`;
   const on = VOICE.rec && VOICE.f === f && String(VOICE.i) === String(i);
-  return `<div class="notebox">${textarea}<button class="mic ${on ? "rec" : ""}" data-act="mic" data-f="${f}"${i != null ? ` data-i="${i}"` : ""} aria-label="${on ? "Stop dictation" : "Dictate a note"}">${MIC_SVG}</button></div>`;
+  return `<div class="notebox ${has ? "has" : ""}">${textarea}${clr}<button class="mic ${on ? "rec" : ""}" data-act="mic" data-f="${f}"${i != null ? ` data-i="${i}"` : ""} aria-label="${on ? "Stop dictation" : "Dictate a note"}">${MIC_SVG}</button></div>`;
 }
 const voiceSel = (f, i) => `#view textarea[data-f="${f}"]` + (i != null ? `[data-i="${i}"]` : "");
 const voiceBtn = (f, i) => document.querySelector(`#view button.mic[data-f="${f}"]` + (i != null ? `[data-i="${i}"]` : ""));
 function voiceWrite(text){
   const s = editorSession(); if (!s) return;
   if (VOICE.f === "snotes") s.notes = text; else if (s.exercises[VOICE.i]) s.exercises[VOICE.i].notes = text; else return;
-  const ta = document.querySelector(voiceSel(VOICE.f, VOICE.i)); if (ta) { ta.value = text; autosize(ta); }
+  const ta = document.querySelector(voiceSel(VOICE.f, VOICE.i)); if (ta) { ta.value = text; autosize(ta); const nb = ta.closest(".notebox"); if (nb) nb.classList.toggle("has", /\S/.test(text)); }
   queueSave(s);
 }
 function voiceTidy(base, said){
@@ -712,7 +719,7 @@ function voiceListen(){
     const said = fin.join(" ");
     if (said && preview.toLowerCase().startsWith(said.toLowerCase())) preview = preview.slice(said.length);
     const ta = document.querySelector(voiceSel(f, i));
-    if (ta) { ta.value = withSegs(VOICE.base, preview.trim() ? [...fin, preview] : fin); autosize(ta); }  // live preview while you speak
+    if (ta) { ta.value = withSegs(VOICE.base, preview.trim() ? [...fin, preview] : fin); autosize(ta); const nb = ta.closest(".notebox"); if (nb) nb.classList.toggle("has", /\S/.test(ta.value)); }  // live preview while you speak
     if (fin.length) voiceSaveSoon(withSegs(VOICE.base, fin));
   };
   rec.onerror = ev => {
@@ -724,6 +731,7 @@ function voiceListen(){
   rec.onend = () => {
     if (VOICE.rec !== rec) return;
     clearTimeout(VOICE.saveT);
+    if (VOICE.discard) { VOICE.discard = false; segs = []; }
     if (segs.length) { VOICE.base = withSegs(VOICE.base, segs); voiceWrite(VOICE.base); }
     const stillHere = document.querySelector(voiceSel(f, i)) && editorSession();
     if (VOICE.active && !fatal && stillHere) { if (!voiceListen()) voiceFinish(); }
@@ -1275,6 +1283,14 @@ document.addEventListener("click", async e => {
   const act = b.dataset.act, i = b.dataset.i != null ? +b.dataset.i : null, j = b.dataset.j != null ? +b.dataset.j : null;
   const s = editorSession();
   if (act === "mic") { voiceStart(b.dataset.f, i); return; }
+  if (act === "noteClear" && s) {
+    const f = b.dataset.f, ex = f === "exnotes" ? s.exercises[i] : null, old = ex ? ex.notes : s.notes;
+    if (VOICE.rec && VOICE.f === f && String(VOICE.i) === String(i)) { VOICE.discard = true; VOICE.base = ""; voiceStop(); }
+    const set = v => { if (ex) ex.notes = v; else s.notes = v; const ta = document.querySelector(voiceSel(f, ex ? i : null)); if (ta) { ta.value = v; autosize(ta); ta.closest(".notebox").classList.toggle("has", /\S/.test(v)); } queueSave(s); };
+    set("");
+    if (old && old.trim()) toast("Note cleared", {action: "Undo", ms: 5000, onAction: () => set(old)});
+    return;
+  }
   if (act === "rate" && S.checkin) {
     const r = S.checkin.ready, k = b.dataset.k, v = +b.dataset.v;
     if (r[k] === v) delete r[k]; else r[k] = v;
@@ -1313,11 +1329,20 @@ document.addEventListener("click", async e => {
         st.done = true; b.classList.add("on");
         const isA = ex.group && /A$/i.test(ex.label) && s.exercises.some(o => o !== ex && o.group === ex.group);
         const exerciseDone = ex.sets.every(x => x.done);
-        // superset partner with sets still to do (e.g. 4 laterals + 3 curls): rest before its extra set
-        const partner = ex.group ? s.exercises.find(o => o !== ex && o.group === ex.group && o.sets.some(x => !x.done)) : null;
+        // superset: the timer points to the next exercise of the round that still has sets (e.g. 4 laterals + 3 curls: rest before the extra set).
+        // An exercise earlier in the round that hasn't been started was skipped, so the timer stays on what you're actually doing.
+        let partner = null;
+        if (ex.group) {
+          const members = s.exercises.filter(o => o.group === ex.group), idx = members.indexOf(ex);
+          for (let k = 1; k < members.length && !partner; k++) {
+            const o = members[(idx + k) % members.length], wraps = idx + k >= members.length;
+            if (o.sets.some(x => !x.done) && !(wraps && !o.sets.some(x => x.done))) partner = o;
+          }
+        }
+        const groupLeft = ex.group && s.exercises.some(o => o !== ex && o.group === ex.group && o.sets.some(x => !x.done));
         if (s.status === "active" && !isA && ex.rest && !exerciseDone) { const nx = partner || ex, nextJ = nx.sets.findIndex(x => !x.done); startTimer(ex.rest, nx.name + ` · next: set ${nextJ + 1}`); }
         else if (s.status === "active" && !isA && exerciseDone && partner && ex.rest) { const nextJ = partner.sets.findIndex(x => !x.done); startTimer(ex.rest, partner.name + ` · next: set ${nextJ + 1}`); }
-        else if (s.status === "active" && exerciseDone && !partner) { stopTimer(); toast("✓ " + (ex.group ? "Superset" : ex.name) + " done"); }
+        else if (s.status === "active" && exerciseDone && !partner) { stopTimer(); toast("✓ " + (ex.group && !groupLeft ? "Superset" : ex.name) + " done"); }
         else if (s.status === "active" && isA && partner) { stopTimer(); toast("Superset → " + partner.name); }
       } else { st.done = false; }
       queueSave(s); rerenderEditor(); return;
@@ -1466,6 +1491,7 @@ document.addEventListener("click", async e => {
 });
 document.addEventListener("input", e => {
   if (S.pb && e.target.dataset.pf) { pbInput(e.target); return; }
+  if (e.target.closest && e.target.closest(".notebox")) e.target.closest(".notebox").classList.toggle("has", /\S/.test(e.target.value));
   const t = e.target, f = t.dataset.f; if (!f) return;
   if (t.tagName === "TEXTAREA") autosize(t);
   if (f === "progsel") { S.progressEx = t.value; render(); return; }
@@ -1488,9 +1514,16 @@ function autosize(t){
 }
 function autosizeAll(){ document.querySelectorAll("textarea:not(.code)").forEach(autosize); }
 let toastT;
-function toast(msg){
+function toast(msg, opts){
   let el = $("#toast"); if (!el) { el = document.createElement("div"); el.id = "toast"; el.style.cssText = "position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:12px;font-weight:600;font-size:14px;z-index:60;box-shadow:0 6px 20px #0008;max-width:90vw"; document.body.appendChild(el); }
-  el.textContent = msg; el.style.display = "block"; clearTimeout(toastT); toastT = setTimeout(() => el.style.display = "none", 2200);
+  el.textContent = msg; el.style.display = "block"; clearTimeout(toastT);
+  if (opts && opts.action) {
+    const btn = document.createElement("button"); btn.textContent = opts.action;
+    btn.style.cssText = "margin-left:14px;background:none;border:none;color:inherit;font:inherit;font-weight:700;text-decoration:underline;padding:6px 2px";
+    btn.onclick = () => { el.style.display = "none"; clearTimeout(toastT); opts.onAction(); };
+    el.appendChild(btn);
+  }
+  toastT = setTimeout(() => el.style.display = "none", opts && opts.ms || 2200);
 }
 
 /* ---------- history ---------- */
